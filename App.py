@@ -5,24 +5,20 @@ import pandas as pd
 st.set_page_config(page_title="AI Stock Screener Pro", layout="wide")
 
 st.title("⚡ AI Stock Screener Pro")
-st.caption("কাস্টম সাব-সেক্টর, টাইমফ্রেম ফিল্টার, ৭টি রিভার্সাল প্যাটার্ন ও বায়ার/সেলার মোমেন্টাম ট্র্যাকার")
+st.caption("শুধুমাত্র কনফার্মড বুলিশ রিভার্সাল প্যাটার্ন যুক্ত স্টকগুলোই নিচে দেখাবে")
 
+# সাব-সেক্টরের বিশাল স্টক লিস্ট (Nifty 500 ও প্রধান সেক্টরাল স্টকসহ)
 SUB_SECTORS = {
-    "🏥 Hospitals & Diagnostics": ["APOLLOHOSP.NS", "FORTIS.NS", "MAXHEALTH.NS", "NH.NS", "ASTERDM.NS", "LALPATHLAB.NS"],
-    "⛽ Oil & Gas": ["ONGC.NS", "RELIANCE.NS", "IOC.NS", "BPCL.NS", "HPCL.NS", "GAIL.NS", "OIL.NS", "ATGL.NS"],
-    "🛡️ Defense & Aerospace": ["HAL.NS", "BEL.NS", "MAZDOCK.NS", "COCHINSHIP.NS", "DATAPATTNS.NS", "BDL.NS"],
-    "🚂 Railways & Transport": ["IRCTC.NS", "RVNL.NS", "IRFC.NS", "TITAGARH.NS", "RITES.NS", "CONCOR.NS"],
-    "⚡ Green & Renewable Energy": ["TATAPOWER.NS", "IREDA.NS", "SUZLON.NS", "BORORENEW.NS", "ADANIGREEN.NS", "SJWN.NS"],
-    "🏨 Hotels & Tourism": ["INDHOTEL.NS", "EIHOTEL.NS", "LEMONTREE.NS", "CHALET.NS", "EASEMYTRIP.NS"],
-    "🧪 Specialty Chemicals": ["PIDILITIND.NS", "AARTIIND.NS", "SRF.NS", "DEEPAKNTR.NS", "TATACHEM.NS", "ATUL.NS"],
-    "🍬 Sugar & Ethanol": ["RENUKA.NS", "BALRAMCHIN.NS", "TRIVENI.NS", "EIDPARRY.NS", "BAJAJIND.NS"],
-    "🚗 EV & Auto Components": ["SONACOMS.NS", "MOTHERSON.NS", "BOSCHLTD.NS", "AMARAJABAT.NS", "EXIDEIND.NS", "OLECTRA.NS"],
-    "💻 IT & Software": ["TCS.NS", "INFY.NS", "WIPRO.NS", "TECHM.NS", "HCLTECH.NS", "PERSISTENT.NS", "COFORGE.NS"],
-    "🏦 Banking & NBFC": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "BAJFINANCE.NS", "MUTHOOTFIN.NS"],
-    "🏗️ Construction & Cement": ["LT.NS", "ULTRACEMCO.NS", "GRASIM.NS", "AMBUJACEM.NS", "ACC.NS", "NCC.NS"],
-    "📱 Telecom & Digital": ["BHARTIARTL.NS", "IDEA.NS", "TATACOMM.NS", "INDUSTOWER.NS"],
-    "📜 Paper & Packaging": ["JKPAPER.NS", "CENTURYTEX.NS", "WESTCOAST.NS"],
-    "🛒 FMCG & Retail": ["HUNVR.NS", "ITC.NS", "NESTLEIND.NS", "BRITANNIA.NS", "DMART.NS", "TRENT.NS"]
+    "🏦 Banking & NBFC": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "BAJFINANCE.NS", "MUTHOOTFIN.NS", "INDUSINDBK.NS", "BANKBARODA.NS", "PNB.NS", "FEDERALBNK.NS", "IDFCFIRSTB.NS", "AUBANK.NS", "CANBK.NS", "UNIONBANK.NS", "BANDHANBNK.NS", "CHOLAFIN.NS", "SHRIRAMFIN.NS", "MNGLMFIN.NS", "BAJAJFINSV.NS"],
+    "💻 IT & Software": ["TCS.NS", "INFY.NS", "WIPRO.NS", "TECHM.NS", "HCLTECH.NS", "PERSISTENT.NS", "COFORGE.NS", "LTIM.NS", "MPHASIS.NS", "LTTS.NS", "TATAELXSI.NS", "KPITTECH.NS", "CYIENT.NS", "OFSS.NS", "ZENSARTECH.NS"],
+    "⛽ Oil, Gas & Energy": ["ONGC.NS", "RELIANCE.NS", "IOC.NS", "BPCL.NS", "HPCL.NS", "GAIL.NS", "OIL.NS", "ATGL.NS", "PETRONET.NS", "MGL.NS", "IGL.NS", "GUJGASLTD.NS", "COALINDIA.NS", "NTPC.NS", "POWERGRID.NS"],
+    "🛡️ Defense & Shipbuilding": ["HAL.NS", "BEL.NS", "MAZDOCK.NS", "COCHINSHIP.NS", "DATAPATTNS.NS", "BDL.NS", "PARAS.NS", "GRSE.NS", "ZENACT.NS", "SOLARINDS.NS"],
+    "🚂 Railways & Transport": ["IRCTC.NS", "RVNL.NS", "IRFC.NS", "TITAGARH.NS", "RITES.NS", "CONCOR.NS", "TEXRAIL.NS", "RAILTEL.NS", "BEML.NS"],
+    "⚡ Green & Renewable Energy": ["TATAPOWER.NS", "IREDA.NS", "SUZLON.NS", "BORORENEW.NS", "ADANIGREEN.NS", "SJWN.NS", "NHPC.NS", "INOXWIND.NS", "GREENPOWER.NS", "KPIGREEN.NS"],
+    "🚗 Auto & EV Components": ["TATAMOTORS.NS", "MARUTI.NS", "M&M.NS", "HEROMOTOCO.NS", "BAJAJ-AUTO.NS", "EICHERMOT.NS", "SONACOMS.NS", "MOTHERSON.NS", "BOSCHLTD.NS", "EXIDEIND.NS", "OLECTRA.NS", "TUBEINVEST.NS", "BALKRISIND.NS", "BHARATFORG.NS"],
+    "🏥 Pharma & Healthcare": ["SUNPHARMA.NS", "CIPLA.NS", "DRREDDY.NS", "DIVISLAB.NS", "APOLLOHOSP.NS", "FORTIS.NS", "MAXHEALTH.NS", "NH.NS", "LALPATHLAB.NS", "MANKIND.NS", "TORNTPHARM.NS", "LUPIN.NS", "ZYDUSLIFE.NS", "AUROPHARMA.NS", "GLENMARK.NS"],
+    "🏗️ Cement & Metals": ["LT.NS", "ULTRACEMCO.NS", "GRASIM.NS", "AMBUJACEM.NS", "ACC.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "HINDALCO.NS", "JINDALSTEL.NS", "NMDC.NS", "NATIONALUM.NS", "VEDL.NS"],
+    "🛒 FMCG & Retail": ["HUNVR.NS", "ITC.NS", "NESTLEIND.NS", "BRITANNIA.NS", "DMART.NS", "TRENT.NS", "DABUR.NS", "GODREJCP.NS", "MARICO.NS", "TATACONSUM.NS", "VARUN.NS", "VBL.NS"]
 }
 
 col_sec, col_tf = st.columns(2)
@@ -52,10 +48,9 @@ def analyze_stock(df):
     if len(df) < 20:
         return None
     
-    # শেষ ৩টি ক্যান্ডেলের ডাটা (Multi-candle Pattern ধরার জন্য)
-    c1 = df.iloc[-1]  # বর্তমান ক্যান্ডেল
-    c2 = df.iloc[-2]  # আগের দিনের ক্যান্ডেল
-    c3 = df.iloc[-3]  # ২ দিন আগের ক্যান্ডেল
+    c1 = df.iloc[-1]
+    c2 = df.iloc[-2]
+    c3 = df.iloc[-3]
     
     open1, close1, high1, low1 = c1['Open'], c1['Close'], c1['High'], c1['Low']
     open2, close2, high2, low2 = c2['Open'], c2['Close'], c2['High'], c2['Low']
@@ -69,7 +64,6 @@ def analyze_stock(df):
     lower_shadow1 = min(open1, close1) - low1
     upper_shadow1 = high1 - max(open1, close1)
     
-    # সাপোর্টে থাকার শর্ত (গত ২০ ক্যান্ডেলের লো-এর ৩%-এর মধ্যে থাকা)
     recent_low = df['Low'].tail(20).min()
     is_at_support = low1 <= (recent_low * 1.03)
     
@@ -80,31 +74,18 @@ def analyze_stock(df):
     pattern = "⚪ No Pattern"
     
     if is_at_support:
-        # ১. Morning Star (৩ ক্যান্ডেলের প্যাটার্ন)
         if is_red3 and (abs(close2 - open2) <= 0.3 * (high2 - low2)) and is_green1 and (close1 > (open3 + close3) / 2):
             pattern = "🌟 Morning Star (Support)"
-            
-        # ২. Bullish Engulfing (২ ক্যান্ডেলের প্যাটার্ন)
         elif is_red2 and is_green1 and (close1 >= open2) and (open1 <= close2):
             pattern = "🔥 Bullish Engulfing (Support)"
-            
-        # ৩. Piercing Line (২ ক্যান্ডেলের প্যাটার্ন)
         elif is_red2 and is_green1 and (open1 < close2) and (close1 > (open2 + close2) / 2) and (close1 < open2):
             pattern = "⚡ Piercing Line (Support)"
-            
-        # ৪. Green Bullish Hammer
         elif is_green1 and (lower_shadow1 >= 2 * body1) and (upper_shadow1 <= 0.3 * body1) and (body1 > 0):
             pattern = "🔨 Green Bullish Hammer (Support)"
-            
-        # ৫. Inverted Hammer
         elif is_green1 and (upper_shadow1 >= 2 * body1) and (lower_shadow1 <= 0.3 * body1) and (body1 > 0):
             pattern = "🙃 Inverted Hammer (Support)"
-            
-        # ৬. Dragonfly Doji
         elif (body1 <= 0.1 * range1) and (lower_shadow1 >= 0.6 * range1) and (upper_shadow1 <= 0.1 * range1):
             pattern = "🐉 Dragonfly Doji (Support)"
-            
-        # ৭. Spinning Top
         elif (body1 <= 0.25 * range1) and (upper_shadow1 >= body1) and (lower_shadow1 >= body1):
             pattern = "🌀 Spinning Top (Support)"
             
@@ -119,7 +100,7 @@ def analyze_stock(df):
     }
 
 if st.button("🔍 স্ক্যান শুরু করুন"):
-    st.write(f"**{selected_category}** সেকশনে **[{timeframe_option}]** টাইমফ্রেমে স্ক্যান করা হচ্ছে...")
+    st.write(f"**{selected_category}** সেকশনের সব স্টক স্ক্যান করা হচ্ছে...")
     results = []
     tickers = SUB_SECTORS[selected_category]
     progress = st.progress(0)
@@ -128,7 +109,8 @@ if st.button("🔍 স্ক্যান শুরু করুন"):
         try:
             data = fetch_stock_data(ticker, timeframe_option)
             res = analyze_stock(data)
-            if res:
+            # ফিল্টার: শুধুমাত্র যদি ক্যান্ডেল প্যাটার্ন "⚪ No Pattern" না হয়, তবেই স্ক্রিনে দেখাবে!
+            if res and res["Pattern"] != "⚪ No Pattern":
                 clean_name = ticker.replace(".NS", "")
                 results.append({
                     "Stock": clean_name,
@@ -142,7 +124,7 @@ if st.button("🔍 স্ক্যান শুরু করুন"):
         progress.progress((idx + 1) / len(tickers))
         
     if results:
-        st.success(f"স্ক্যানিং সম্পন্ন! ({timeframe_option} রেজাল্ট):")
+        st.success(f"স্ক্যানিং সম্পন্ন! মোট {len(results)} টি স্টকে রিভার্সাল প্যাটার্ন পাওয়া গেছে:")
         
         for item in results:
             with st.container():
@@ -164,4 +146,5 @@ if st.button("🔍 স্ক্যান শুরু করুন"):
                     st.link_button("🚀 Open in Groww", groww_url)
                     st.link_button("📈 TradingView", tv_url)
                 st.divider()
-    
+    else:
+        st.warning("⚠️ এই মুহূর্তে এই সাব-সেক্টরের কোনো স্টকে সাপোর্টে রিভার্সাল প্যাটার্ন তৈরি হয়নি।")
