@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="AI Stock Screener Pro", layout="wide")
 
 st.title("⚡ AI Stock Screener Pro")
-st.caption("কাস্টম সাব-সেক্টর, টাইমফ্রেম ফিল্টার, প্যাটার্ন ও বায়ার/সেলার মোমেন্টাম ট্র্যাকার")
+st.caption("কাস্টম সাব-সেক্টর, টাইমফ্রেম ফিল্টার, ৭টি রিভার্সাল প্যাটার্ন ও বায়ার/সেলার মোমেন্টাম ট্র্যাকার")
 
 SUB_SECTORS = {
     "🏥 Hospitals & Diagnostics": ["APOLLOHOSP.NS", "FORTIS.NS", "MAXHEALTH.NS", "NH.NS", "ASTERDM.NS", "LALPATHLAB.NS"],
@@ -52,36 +52,67 @@ def analyze_stock(df):
     if len(df) < 20:
         return None
     
-    latest = df.iloc[-1]
-    open_p, close_p = latest['Open'], latest['Close']
-    high_p, low_p = latest['High'], latest['Low']
+    # শেষ ৩টি ক্যান্ডেলের ডাটা (Multi-candle Pattern ধরার জন্য)
+    c1 = df.iloc[-1]  # বর্তমান ক্যান্ডেল
+    c2 = df.iloc[-2]  # আগের দিনের ক্যান্ডেল
+    c3 = df.iloc[-3]  # ২ দিন আগের ক্যান্ডেল
     
-    body = abs(close_p - open_p)
-    total_range = high_p - low_p
-    if total_range == 0:
+    open1, close1, high1, low1 = c1['Open'], c1['Close'], c1['High'], c1['Low']
+    open2, close2, high2, low2 = c2['Open'], c2['Close'], c2['High'], c2['Low']
+    open3, close3, high3, low3 = c3['Open'], c3['Close'], c3['High'], c3['Low']
+    
+    body1 = abs(close1 - open1)
+    range1 = high1 - low1
+    if range1 == 0:
         return None
         
-    lower_shadow = min(open_p, close_p) - low_p
-    upper_shadow = high_p - max(open_p, close_p)
+    lower_shadow1 = min(open1, close1) - low1
+    upper_shadow1 = high1 - max(open1, close1)
     
+    # সাপোর্টে থাকার শর্ত (গত ২০ ক্যান্ডেলের লো-এর ৩%-এর মধ্যে থাকা)
     recent_low = df['Low'].tail(20).min()
-    is_at_support = low_p <= (recent_low * 1.03)
+    is_at_support = low1 <= (recent_low * 1.03)
     
-    is_hammer = (lower_shadow >= 2 * body) and (upper_shadow <= 0.3 * body) and (body > 0)
-    is_spinning_top = (body <= 0.25 * total_range) and (upper_shadow >= body) and (lower_shadow >= body)
+    is_green1 = close1 > open1
+    is_red2 = close2 < open2
+    is_red3 = close3 < open3
     
     pattern = "⚪ No Pattern"
+    
     if is_at_support:
-        if is_hammer:
-            pattern = "🔨 Bullish Hammer (Support)"
-        elif is_spinning_top:
+        # ১. Morning Star (৩ ক্যান্ডেলের প্যাটার্ন)
+        if is_red3 and (abs(close2 - open2) <= 0.3 * (high2 - low2)) and is_green1 and (close1 > (open3 + close3) / 2):
+            pattern = "🌟 Morning Star (Support)"
+            
+        # ২. Bullish Engulfing (২ ক্যান্ডেলের প্যাটার্ন)
+        elif is_red2 and is_green1 and (close1 >= open2) and (open1 <= close2):
+            pattern = "🔥 Bullish Engulfing (Support)"
+            
+        # ৩. Piercing Line (২ ক্যান্ডেলের প্যাটার্ন)
+        elif is_red2 and is_green1 and (open1 < close2) and (close1 > (open2 + close2) / 2) and (close1 < open2):
+            pattern = "⚡ Piercing Line (Support)"
+            
+        # ৪. Green Bullish Hammer
+        elif is_green1 and (lower_shadow1 >= 2 * body1) and (upper_shadow1 <= 0.3 * body1) and (body1 > 0):
+            pattern = "🔨 Green Bullish Hammer (Support)"
+            
+        # ৫. Inverted Hammer
+        elif is_green1 and (upper_shadow1 >= 2 * body1) and (lower_shadow1 <= 0.3 * body1) and (body1 > 0):
+            pattern = "🙃 Inverted Hammer (Support)"
+            
+        # ৬. Dragonfly Doji
+        elif (body1 <= 0.1 * range1) and (lower_shadow1 >= 0.6 * range1) and (upper_shadow1 <= 0.1 * range1):
+            pattern = "🐉 Dragonfly Doji (Support)"
+            
+        # ৭. Spinning Top
+        elif (body1 <= 0.25 * range1) and (upper_shadow1 >= body1) and (lower_shadow1 >= body1):
             pattern = "🌀 Spinning Top (Support)"
             
-    buyer_power = round(((close_p - low_p) / total_range) * 100, 1)
-    seller_power = round(((high_p - close_p) / total_range) * 100, 1)
+    buyer_power = round(((close1 - low1) / range1) * 100, 1)
+    seller_power = round(((high1 - close1) / range1) * 100, 1)
     
     return {
-        "Price": round(close_p, 2),
+        "Price": round(close1, 2),
         "Pattern": pattern,
         "Buyer Power %": buyer_power,
         "Seller Power %": seller_power
@@ -133,4 +164,4 @@ if st.button("🔍 স্ক্যান শুরু করুন"):
                     st.link_button("🚀 Open in Groww", groww_url)
                     st.link_button("📈 TradingView", tv_url)
                 st.divider()
-      
+    
