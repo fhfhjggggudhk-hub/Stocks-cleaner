@@ -278,4 +278,5 @@ def render_cards(items):
             c1, c2, c3, c4 = st.columns([2, 2, 3, 2])
             stock_name = item["Stock"]
             groww_url = f"https://groww.in/search?q={stock_name}"
-            tv_url = f"https://in.tradingview.com/char
+            tv_url = f"https://in.tradingview.com/chart/?symbol=NSE:{stock_name}"
+            
