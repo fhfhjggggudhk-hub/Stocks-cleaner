@@ -156,11 +156,12 @@ SUB_SECTORS = {
     ]
 }
 
-col_sec, col_tf = st.columns(2)
-with col_sec:
-    selected_category = st.selectbox("একটি সাব-সেক্টর বেছে নিন:", list(SUB_SECTORS.keys()))
-with col_tf:
-    timeframe_option = st.selectbox("ক্যান্ডেল টাইমফ্রেম (Timeframe):", ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"])
+selected_category = st.selectbox("একটি সাব-সেক্টর বেছে নিন:", list(SUB_SECTORS.keys()))
+timeframe_option = st.selectbox("ক্যান্ডেল টাইমফ্রেম (Timeframe):", ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"])
+
+# ফাঁকা স্পেস দেওয়া হয়েছে যাতে মোবাইলের নিচের বাড়ে ঢাকা না পড়ে
+st.write("")
+start_scan = st.button("🔍 স্ক্যান শুরু করুন", use_container_width=True, type="primary")
 
 def fetch_stock_data(ticker, tf_choice):
     stock = yf.Ticker(ticker)
@@ -183,7 +184,6 @@ def analyze_stock(df):
     if len(df) < 21:
         return None
     
-    # বর্তমান ও পেছনের ক্যান্ডেলসমূহ
     c1 = df.iloc[-1]
     c2 = df.iloc[-2]
     c3 = df.iloc[-3]
@@ -200,12 +200,10 @@ def analyze_stock(df):
     lower_shadow1 = min(open1, close1) - low1
     upper_shadow1 = high1 - max(open1, close1)
     
-    # প্রপার সাপোর্ট ও রেজিস্ট্যান্স ফিল্টার (পূর্ববর্তী ২০ ক্যান্ডেলের লো ও হাই)
     prev_df = df.iloc[-21:-1]
     recent_low = prev_df['Low'].min()
     recent_high = prev_df['High'].max()
     
-    # সূক্ষ্ম সাপোর্ট ও রেজিস্ট্যান্স টলারেন্স (Strict 0.8% Range)
     is_at_support = (low1 <= recent_low * 1.008)
     is_at_resistance = (high1 >= recent_high * 0.992)
     
@@ -219,7 +217,7 @@ def analyze_stock(df):
     pattern = "⚪ No Pattern"
     type_tag = "None"
     
-    # 🟢 বুলিশ প্যাটার্ন ফিল্টার (শুধুমাত্র প্রপার সাপোর্টে)
+    # 🟢 বুলিশ প্যাটার্ন ফিল্টার (প্রপার সাপোর্টে)
     if is_at_support:
         if is_red3 and (abs(close2 - open2) <= 0.3 * (high2 - low2)) and is_green1 and (close1 > (open3 + close3) / 2):
             pattern = "🌟 Morning Star"
@@ -240,7 +238,7 @@ def analyze_stock(df):
             pattern = "🐉 Dragonfly Doji"
             type_tag = "Bullish"
 
-    # 🔴 বেয়ারিশ প্যাটার্ন ফিল্টার (শুধুমাত্র প্রপার রেজিস্ট্যান্সে)
+    # 🔴 বেয়ারিশ প্যাটার্ন ফিল্টার (প্রপার রেজিস্ট্যান্সে)
     if is_at_resistance and type_tag == "None":
         if is_green3 and (abs(close2 - open2) <= 0.3 * (high2 - low2)) and is_red1 and (close1 < (open3 + close3) / 2):
             pattern = "🌩️ Evening Star"
@@ -280,3 +278,5 @@ def render_cards(items):
             groww_url = f"https://groww.in/search?q={stock_name}"
             tv_url = f"https://in.tradingview.com/chart/?symbol=NSE:{stock_name}"
             
+            with c1:
+                st.markdown(f"### **{stock_na
