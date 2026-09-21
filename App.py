@@ -4,13 +4,13 @@ import yfinance as yf
 
 st.set_page_config(page_title="AI Stock Screener Pro", layout="wide")
 
-st.title("⚡ AI Stock Screener Pro (₹500 - ₹2000 Range Filter)")
+st.title("⚡ AI Stock Screener Pro (All-Stock Pattern Scanner)")
 st.caption(
-    "১০টি সাব-সেক্টরের ১,১০৫টি টপ স্টকের মধ্যে শুধুমাত্র ₹৫০০ থেকে ₹২,০০০"
-    " টাকার মধ্যে থাকা স্টকগুলোর সাপোর্ট ও রেজিস্ট্যান্স প্যাটার্ন।"
+    "১০টি সাব-সেক্টরের ১,১০৫টি টপ স্টকের অল-প্রাইস ক্যান্ডেলস্টিক স্ক্যানার।"
+    " দামের উপর ভিত্তি করে কালার-ট্যাগিং যুক্ত করা হয়েছে।"
 )
 
-# ১০টি সাব-সেক্টরে আপনার নির্দিষ্ট করা স্টকসমূহ (৪ নম্বর সেক্টরে সঠিকভাবে ১১০টি স্টক)
+# ১০টি সাব-সেক্টরে আপনার নির্দিষ্ট করা ১,১০৫টি স্টক
 SUB_SECTORS = {
     "🏦 1. Banking, Finance & NBFC (160 Stocks)": [
         "HDFCBANK.NS",
@@ -1020,12 +1020,25 @@ SUB_SECTORS = {
     ],
 }
 
-selected_category = st.selectbox(
-    "একটি সাব-সেক্টর বেছে নিন:", list(SUB_SECTORS.keys())
-)
-timeframe_option = st.selectbox(
-    "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
-    ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
+# ফিল্টার এবং সিলেক্টর
+c_top1, c_top2 = st.columns([2, 2])
+
+with c_top1:
+    selected_category = st.selectbox(
+        "একটি সাব-সেক্টর বেছে নিন:", list(SUB_SECTORS.keys())
+    )
+
+with c_top2:
+    timeframe_option = st.selectbox(
+        "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
+        ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
+    )
+
+# প্রাইস রেঞ্জ দেখার ফিল্টার (ডিফল্টভাবে সব সিলেক্ট করা থাকবে)
+selected_price_status = st.multiselect(
+    "🎯 যে প্রাইস রেঞ্জের স্টক অ্যাপে দেখতে চান তা টিক দিন:",
+    ["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
+    default=["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
 )
 
 st.write("")
@@ -1072,9 +1085,13 @@ def analyze_stock(df):
     open2, close2, high2, low2 = c2["Open"], c2["Close"], c2["High"], c2["Low"]
     open3, close3, high3, low3 = c3["Open"], c3["Close"], c3["High"], c3["Low"]
 
-    # 🎯 প্রাইস ফিল্টার: শুধুমাত্র ₹৫০০ থেকে ₹২,০০০ টাকার মধ্যে থাকা স্টক ফিল্টার করবে
-    if not (500 <= close1 <= 2000):
-        return None
+    # 🏷️ কালার-ট্যাগ প্রাইস স্ট্যাটাস নির্ধারণ (কোনো স্টক বাদ দেওয়া হবে না)
+    if close1 < 500:
+        price_status = "🟡 Below ₹500"
+    elif 500 <= close1 <= 2000:
+        price_status = "🟢 In Range (₹500 - ₹2,000)"
+    else:
+        price_status = "🔴 Above ₹2,000"
 
     body1 = abs(close1 - open1)
     range1 = high1 - low1
@@ -1202,6 +1219,7 @@ def analyze_stock(df):
 
     return {
         "Price": round(close1, 2),
+        "Price_Status": price_status,
         "Pattern": pattern,
         "Type": type_tag,
         "Buyer Power %": buyer_power,
@@ -1212,7 +1230,7 @@ def analyze_stock(df):
 def render_cards(items):
     for item in items:
         with st.container():
-            c1, c2, c3, c4 = st.columns([2, 2, 3, 2])
+            c1, c2, c3, c4 = st.columns([2.5, 2, 3, 2])
             stock_name = item["Stock"]
             groww_url = f"https://groww.in/search?q={stock_name}"
             tv_url = (
@@ -1221,7 +1239,9 @@ def render_cards(items):
 
             with c1:
                 st.markdown(f"### **{stock_name}**")
-                st.caption(f"Price: ₹{item['Price']}")
+                st.caption(
+                    f"LTP: **₹{item['Price']}** | {item['Price_Status']}"
+                )
             with c2:
                 st.write(f"**{item['Pattern']}**")
             with c3:
@@ -1239,8 +1259,8 @@ def render_cards(items):
 
 if start_scan:
     st.write(
-        f"**{selected_category}** সেকশনে ₹৫০০ থেকে ₹২০০০ রেঞ্জের স্টকগুলোর"
-        " সাপোর্ট ও রেজিস্ট্যান্স স্ক্যান করা হচ্ছে..."
+        f"**{selected_category}** সেকশনে সমস্ত স্টকের ক্যান্ডেলস্টিক প্যাটার্ন"
+        " স্ক্যান করা হচ্ছে..."
     )
     bullish_results = []
     bearish_results = []
@@ -1253,18 +1273,21 @@ if start_scan:
             data = fetch_stock_data(ticker, timeframe_option)
             res = analyze_stock(data)
             if res and res["Pattern"] != "⚪ No Pattern":
-                clean_name = ticker.replace(".NS", "")
-                card_data = {
-                    "Stock": clean_name,
-                    "Price": res["Price"],
-                    "Pattern": res["Pattern"],
-                    "Buyer Power (%)": res["Buyer Power %"],
-                    "Seller Power (%)": res["Seller Power %"],
-                }
-                if res["Type"] == "Bullish":
-                    bullish_results.append(card_data)
-                elif res["Type"] == "Bearish":
-                    bearish_results.append(card_data)
+                # সিলেক্ট করা প্রাইস ট্যাগ অনুসারে ফিল্টার
+                if res["Price_Status"] in selected_price_status:
+                    clean_name = ticker.replace(".NS", "")
+                    card_data = {
+                        "Stock": clean_name,
+                        "Price": res["Price"],
+                        "Price_Status": res["Price_Status"],
+                        "Pattern": res["Pattern"],
+                        "Buyer Power (%)": res["Buyer Power %"],
+                        "Seller Power (%)": res["Seller Power %"],
+                    }
+                    if res["Type"] == "Bullish":
+                        bullish_results.append(card_data)
+                    elif res["Type"] == "Bearish":
+                        bearish_results.append(card_data)
         except Exception:
             pass
         progress.progress((idx + 1) / len(tickers))
@@ -1272,30 +1295,26 @@ if start_scan:
     st.success("স্ক্যানিং সম্পন্ন!")
 
     tab_bullish, tab_bearish = st.tabs([
-        f"🟢 Bullish Setups (₹500 - ₹2000) ({len(bullish_results)})",
-        f"🔴 Bearish Setups (₹500 - ₹2000) ({len(bearish_results)})",
+        f"🟢 Bullish Setups ({len(bullish_results)})",
+        f"🔴 Bearish Setups ({len(bearish_results)})",
     ])
 
     with tab_bullish:
         if bullish_results:
-            st.subheader(
-                "🟢 ₹৫০০-₹২০০০ রেঞ্জে সাপোর্টে তৈরি হওয়া বুলিশ সেটআপ:"
-            )
+            st.subheader("🟢 সাপোর্টে তৈরি হওয়া বুলিশ সেটআপ:")
             render_cards(bullish_results)
         else:
             st.info(
-                "⚠️ এই মুহূর্তে এই ক্যাটাগরিতে ₹৫০০-₹২০০০ রেঞ্জের কোনো স্টক"
-                " সাপোর্টে বুলিশ রিভার্সাল তৈরি করেনি।"
+                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে বুলিশ"
+                " রিভার্সাল পাওয়া যায়নি।"
             )
 
     with tab_bearish:
         if bearish_results:
-            st.subheader(
-                "🔴 ₹৫০০-₹২০০০ রেঞ্জে রেজিস্ট্যান্সে তৈরি হওয়া বেয়ারিশ সেটআপ:"
-            )
+            st.subheader("🔴 রেজিস্ট্যান্সে তৈরি হওয়া বেয়ারিশ সেটআপ:")
             render_cards(bearish_results)
         else:
             st.info(
-                "⚠️ এই মুহূর্তে এই ক্যাটাগরিতে ₹৫০০-₹২০০০ রেঞ্জের কোনো স্টক"
-                " রেজিস্ট্যান্সে বেয়ারিশ রিভার্সাল তৈরি করেনি।"
+                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে বেয়ারিশ"
+                " রিভার্সাল পাওয়া যায়নি।"
             )
