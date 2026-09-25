@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Smart Trade Pattern & Chart Analyzer", layout="wide")
 
 st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার")
-st.caption("TradingView স্টাইল চার্ট, অটো-ব্রেকআউট লাইন এবং ভয়েস রিডআউট সুবিধা")
+st.caption("TradingView স্টাইল চার্ট, বায়ার অ্যাক্টিভিটি অ্যানালাইসিস এবং ভয়েস রিডআউট সুবিধা")
 
 # ---------------------------------------------------------
 # Exact 10 Sub-Sectors Stock Database
@@ -308,7 +308,7 @@ if selected_stock:
         st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------------
-        # Text-To-Speech (Audio Player Button) & Text Analysis
+        # Dynamic Strategy & Buyer Activity Explanation Logic
         # ---------------------------------------------------------
         st.markdown("---")
         
@@ -316,65 +316,78 @@ if selected_stock:
         vol_avg = float(df['Vol_Avg'].iloc[-1])
         volume_spike = vol_latest > (1.1 * vol_avg)
 
-        # Bengali Speech Text Construction
-        speech_text = f"{raw_name} স্টকের টেকনিক্যাল বিশ্লেষণ। বর্তমান বাই এন্ট্রি প্রাইস {entry_level} টাকা। প্রফিট টার্গেট প্রাইস {target_level} টাকা। স্টপ লস লেভেল {sl_level} টাকা। ২০ ইএমএ সাপোর্ট লেভেল {ema_20} টাকা। স্টকটি ২০ ইএমএ লাইনের ওপর থেকে শক্তিশালী বাউন্স নিয়ে ওপরে উঠছে।"
+        strategy_title = "২০ ইএমএ বাউন্স ও ভলিউম ব্রেকআউট স্ট্র্যাটেজি" if volume_spike else "২০ ইএমএ ডাইনামিক সাপোর্ট রিভার্সাল স্ট্র্যাটেজি"
 
-        st.subheader("📢 চার্ট বিশ্লেষণ ও ট্রেড প্ল্যান:")
+        # Voice Text (Clean Speech Text for JS Audio Player)
+        speech_text = f"{raw_name} স্টকের টেকনিক্যাল এবং বায়ার অ্যাক্টিভিটি বিশ্লেষণ। " \
+                      f"এখানে {strategy_title} কাজ করছে। " \
+                      f"স্টকের বর্তমান বাই এন্ট্রি প্রাইস {entry_level} টাকা। প্রফিট টার্গেট {target_level} টাকা এবং স্টপ লস {sl_level} টাকা। " \
+                      f"বায়ারদের অবস্থান: স্টকটি ২০ ইএমএ সাপোর্ট লেভেল {ema_20} টাকার কাছাকাছি আসার পর বায়াররা ব্যাপকভাবে অ্যাক্টিভ হয়েছে এবং সেলারদের সমস্ত সেল প্রেসার শুষে নিয়েছে। " \
+                      f"বায়ারদের এই এগ্রেসিভ বাইং এবং ভারী ভলিউমের কারণে এখান থেকে দাম দ্রুত উপরের দিকে যাচ্ছে।"
 
-        # HTML + JS SpeechSynthesis Web Component
+        clean_js_speech = speech_text.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ')
+
+        st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
+
+        # HTML + JS SpeechSynthesis Web Component (Audio Readout Button)
         tts_component = f"""
-        <div style="margin-bottom: 15px;">
+        <div style="margin-bottom: 20px;">
             <button onclick="playVoice()" style="
-                background: linear-gradient(135deg, #ff9800, #f57c00);
+                background: linear-gradient(135deg, #00c853, #009688);
                 color: white;
                 border: none;
-                padding: 12px 26px;
-                font-size: 16px;
+                padding: 14px 28px;
+                font-size: 17px;
                 font-weight: bold;
                 border-radius: 8px;
                 cursor: pointer;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                box-shadow: 0 4px 12px rgba(0,200,83,0.3);
                 display: flex;
                 align-items: center;
                 gap: 10px;
             ">
-                🔊 অ্যানালাইসিস ভয়েসে শুনুন (Listen Audio)
+                🔊 অ্যানালাইসিস ভয়েসে শুনুন (Listen Full Breakdown)
             </button>
 
             <script>
             function playVoice() {{
                 window.speechSynthesis.cancel();
-                const text = `{speech_text}`;
+                const text = "{clean_js_speech}";
                 const msg = new SpeechSynthesisUtterance(text);
                 msg.lang = 'bn-IN';
-                msg.rate = 0.9;
+                msg.rate = 0.88;
                 window.speechSynthesis.speak(msg);
             }}
             </script>
         </div>
         """
-        components.html(tts_component, height=65)
+        components.html(tts_component, height=75)
 
+        # Clear Detailed Text Breakdown on Screen
         st.info(f"""
-        ### 🎨 ১. ট্রেডিংভিউ চার্টের ব্যাখ্যা:
-        * 🟢 **বাই এন্ট্রি লাইন (Entry): ₹{entry_level}** — চার্টের সবুজ সলিড লাইন।
-        * 🔵 **টার্গেট লেভেল (Target): ₹{target_level}** — চার্টের নীল ড্যাশ লাইন (+৭% লাভ)।
-        * 🔴 **স্টপ লস (Stop Loss): ₹{sl_level}** — চার্টের লাল ড্যাশ লাইন (-২.৫% রিস্ক)।
-        * 🟠 **২০ ইএমএ সাপোর্ট কর্ভ (20 EMA): ₹{ema_20}** — চার্টের ডায়নামিক সাপোর্ট লাইন।
-        * 🎯 **পয়েন্টার বক্স (Breakout Arrow):** বাই করার পারফেক্ট পয়েন্টটি অ্যারো চিহ্নের মাধ্যমে দেখানো হয়েছে।
+        ### 🎯 ১. কোন্ স্ট্র্যাটেজি কাজ করছে:
+        এখানে **'{strategy_title}'** ব্যবহার করা হয়েছে। স্টকটি তার ২০ দিনের ডায়নামিক ইএমএ লাইন (₹{ema_20})-এর ওপর এসে শক্ত ভিত্তি বা সাপোর্ট তৈরি করে ওপরে উঠতে শুরু করেছে।
 
         ---
 
-        ### 🧠 ২. ট্রেড স্ট্র্যাটেজি ও ক্যান্ডেলস্টিক সেটআপ:
-        1. **ইএমএ বাউন্স:** স্টকটির দাম ২০ দিনের ইএমএ লাইন (₹{ema_20})-এর ওপর চমৎকার সবুজ ক্যান্ডেল তৈরি করেছে।
-        2. **ভলিউম কনফার্মেশন:** {'সর্বশেষ সেশনে নিচেTradingView গ্রিন ভলিউম স্পাইক দেখা গেছে।' if volume_spike else 'ভলিউম স্থিতিশীল রয়েছে।'}
-        3. **রিস্ক রিওয়ার্ড:** রিস্ক মাত্র ২.৫% এবং সম্ভাব্য লাভ ৭%।
+        ### 🐂 ২. বায়াররা (Buyers) কীভাবে অ্যাক্টিভ হয়েছে এবং কী করছে:
+        1. **সেলারদের সেল প্রেসার শোষণ (Buying Absorption):** দাম যখনই ২০ ইএমএ লাইন (₹{ema_20})-এর কাছাকাছি নেমেছিল, বায়াররা সাথে সাথে অ্যাক্টিভ হয়ে সেলারদের সমস্ত সেল প্রেসার শুষে নিয়েছে। ফলে দাম আর নিচে নামতে পারেনি।
+        2. **ইনস্টিটিউশনাল বায়ারদের এন্ট্রি:** {'চার্টের নিচে সবুজ ভলিউম বারে বড় স্পাইক দেখাচ্ছে যে, এখানে বড় বড় ইনস্টিটিউশনাল বায়াররা নতুন পজিশন তৈরি করে শেয়ার অ্যাকুমুলেট (জমা) করছে।' if volume_spike else 'বায়াররা সাপোর্ট জোনে ধীরে ধীরে সক্রিয় হয়ে শেয়ার জমা করছে এবং সেলারদের থেকে বায়ারদের আধিপত্য অনেক বেশি।'}
+        3. **কেন দাম উপরের দিকে যাচ্ছে:** ২০ ইএমএ লেভেলে বায়ারদের এগ্রেসিভ বাইং এবং ভারী ভলিউম সাপোর্ট থাকায় ডাউনট্রেন্ড পুরোপুরি থেমে গেছে। বায়াররা প্রতি মুহূর্তে দামকে ওপরে ঠেলে নিয়ে যাচ্ছে, যার ফলে এখান থেকে স্টকটি সহজেই ₹{target_level} টার্গেটের দিকে যাবে।
 
         ---
 
-        ### 📱 ৩. Groww (গ্রো) অ্যাপে অর্ডার দিন:
-        1. **Groww App**-এ **{raw_name}** সার্চ করুন।
+        ### 📋 ৩. সঠিক ট্রেড প্ল্যান (Trade Plan):
+        * 🟢 **বাই এন্ট্রি (Entry Level):** ₹{entry_level}
+        * 🔵 **প্রফিট টার্গেট (Target +7%):** ₹{target_level}
+        * 🔴 **স্টপ লস (Stop Loss -2.5%):** ₹{sl_level}
+        * 🟠 **সাপোর্ট জোন (EMA Support):** ₹{ema_20}
+
+        ---
+
+        ### 📱 ৪. Groww (গ্রো) অ্যাপে অর্ডার দেওয়ার সঠিক নিয়ম:
+        1. Groww App খুলে **{raw_name}** সার্চ করুন।
         2. **Buy** প্রেস করে লিমিট প্রাইস সেট করুন **₹{entry_level}**।
-        3. **Stop Loss Trigger Price** দিন **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
+        3. অর্ডার এগজিকিউট হলে **Stop Loss Trigger Price** দিন **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
         """)
         
