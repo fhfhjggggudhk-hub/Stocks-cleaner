@@ -697,7 +697,7 @@ if selected_stock:
 
     st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
 
-    tts_component = f"""
+    tts_html_template = """
     <div style="margin-bottom: 20px;">
         <button onclick="playVoice()" style="
             background: linear-gradient(135deg, #00c853, #009688);
@@ -708,4 +708,4 @@ if selected_stock:
             font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
-            box-sh
+            box
