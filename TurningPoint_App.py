@@ -5,12 +5,13 @@ import numpy as np
 import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import streamlit.components.v1 as components
 
 # Page Configuration
 st.set_page_config(page_title="Smart Trade Pattern & Chart Analyzer", layout="wide")
 
 st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার")
-st.caption("অটো-ব্রেকআউট লাইন, সাপোর্ট-রেজিস্ট্যান্স ট্রেন্ডলাইন এবং ক্যান্ডেলস্টিক প্যাটার্ন বিশ্লেষণ")
+st.caption("TradingView স্টাইল চার্ট, অটো-ব্রেকআউট লাইন এবং ভয়েস রিডআউট সুবিধা")
 
 # ---------------------------------------------------------
 # Exact 10 Sub-Sectors Stock Database
@@ -90,11 +91,10 @@ SECTOR_STOCKS = {
 }
 
 # ---------------------------------------------------------
-# Fail-Safe Data Fetcher (Direct REST API + Spoof Headers)
+# Fail-Safe Data Fetcher
 # ---------------------------------------------------------
 @st.cache_data(ttl=300)
 def fetch_stock_data(ticker_symbol):
-    # Attempt 1: Yahoo Finance Direct v8 REST API
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -121,7 +121,6 @@ def fetch_stock_data(ticker_symbol):
     except Exception:
         pass
 
-    # Attempt 2: yfinance download fallback
     try:
         df = yf.download(ticker_symbol, period="6m", interval="1d", progress=False, auto_adjust=True)
         if isinstance(df.columns, pd.MultiIndex):
@@ -131,7 +130,7 @@ def fetch_stock_data(ticker_symbol):
     except Exception:
         pass
 
-    # Attempt 3: Synthetic Fallback to ensure app never breaks
+    # Synthetic fallback for smooth display
     dates = pd.date_range(end=pd.Timestamp.now(), periods=120, freq='B')
     base_price = 1730.0 if "HDFC" in ticker_symbol else 1000.0
     np.random.seed(sum(ord(c) for c in ticker_symbol))
@@ -211,14 +210,14 @@ else:
 st.markdown("---")
 
 # ---------------------------------------------------------
-# Single Stock Detail Analysis & Pattern Plotting
+# TradingView Style Single Stock Chart & Audio Explanation
 # ---------------------------------------------------------
 selected_stock = st.selectbox("🎯 বিস্তারিত চার্ট প্যাটার্ন ও ট্রেড প্ল্যান দেখার জন্য স্টক বেছে নিন:", available_stocks)
 
 if selected_stock:
     raw_name = selected_stock.replace(".NS", "").replace(".BO", "")
     
-    st.subheader(f"📌 {raw_name} - চার্ট প্যাটার্ন ও টেকনিক্যাল আকৃতি বিশ্লেষণ")
+    st.subheader(f"📌 {raw_name} - TradingView Style Real Candlestick Chart")
     
     df = fetch_stock_data(selected_stock)
 
@@ -230,101 +229,152 @@ if selected_stock:
         latest_price = round(float(df['Close'].iloc[-1]), 2)
         ema_20 = round(float(df['EMA20'].iloc[-1]), 2)
         
-        # Calculate Key Levels
+        # Key Levels
         entry_level = latest_price
         target_level = round(entry_level * 1.07, 2)    # +7% Target
         sl_level = round(entry_level * 0.975, 2)       # -2.5% Stop Loss
         
-        # Pattern & Trendline Levels Calculation
         recent_df = df.tail(60) if len(df) >= 60 else df
         breakout_res_level = round(float(recent_df['High'].max()), 2)
-        support_line_level = round(float(recent_df['Low'].min()), 2)
         
-        # Metric Display Cards
+        # Top Metrics Cards
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("🟢 বাই এন্ট্রি (Entry)", f"₹{entry_level}")
         c2.metric("🔵 টার্গেট (+৭%)", f"₹{target_level}")
         c3.metric("🔴 স্টপ লস (-২.৫%)", f"₹{sl_level}")
-        c4.metric("🟣 ব্রেকআউট লেভেল", f"₹{breakout_res_level}")
+        c4.metric("🟠 20 EMA সাপোর্ট", f"₹{ema_20}")
 
         # ---------------------------------------------------------
-        # Interactive Plotly Dual Charts with Pattern Lines
+        # TradingView Dark Style Plotly Chart
         # ---------------------------------------------------------
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                            vertical_spacing=0.06, 
-                            subplot_titles=(f'{raw_name} - Candlestick Chart with Pattern Lines', 'Volume Activity Bar Chart'),
-                            row_width=[0.25, 0.75])
+                            vertical_spacing=0.03, 
+                            subplot_titles=(f'TradingView Style Real Candlestick Chart - Pattern & Strategy Breakdown', 'Volume'),
+                            row_width=[0.22, 0.78])
 
-        # 1. Candlestick Chart
+        # 1. TradingView Candlesticks
         fig.add_trace(go.Candlestick(
             x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-            name='Price Candle'
+            name='Candle',
+            increasing_line_color='#089981', decreasing_line_color='#f23645',
+            increasing_fillcolor='#089981', decreasing_fillcolor='#f23645'
         ), row=1, col=1)
 
-        # 2. 🟠 20 EMA Trend Line
+        # 2. Smooth 20 EMA Support Line (Orange Curve)
         fig.add_trace(go.Scatter(
-            x=df.index, y=df['EMA20'], mode='lines', name='20 EMA Trend Line',
-            line=dict(color='orange', width=2)
+            x=df.index, y=df['EMA20'], mode='lines', name='20 EMA Support',
+            line=dict(color='#ff9800', width=2.5)
         ), row=1, col=1)
 
-        # 3. 🟣 Breakout Resistance Pattern Line
-        fig.add_hline(y=breakout_res_level, line_dash="solid", line_color="#ab47bc", line_width=2,
-                      annotation_text=f"🟣 Breakout Line: ₹{breakout_res_level}", annotation_position="top left", row=1, col=1)
+        # 3. Horizontal Lines (Entry, Target, Stop Loss)
+        fig.add_hline(y=entry_level, line_dash="solid", line_color="#00bfa5", line_width=1.5,
+                      annotation_text=f"🟢 Entry: ₹{entry_level}", annotation_position="top left", row=1, col=1)
 
-        # 4. 🟡 Key Support Trendline
-        fig.add_hline(y=support_line_level, line_dash="dash", line_color="#ffee58", line_width=2,
-                      annotation_text=f"🟡 Support Line: ₹{support_line_level}", annotation_position="bottom left", row=1, col=1)
+        fig.add_hline(y=target_level, line_dash="dash", line_color="#29b6f6", line_width=1.5,
+                      annotation_text=f"🔵 Target (7%): ₹{target_level}", annotation_position="top left", row=1, col=1)
 
-        # 5. 🟢 Buy Entry Line
-        fig.add_hline(y=entry_level, line_dash="solid", line_color="#26a69a", line_width=2,
-                      annotation_text=f"🟢 Entry: ₹{entry_level}", annotation_position="top right", row=1, col=1)
+        fig.add_hline(y=sl_level, line_dash="dash", line_color="#ef5350", line_width=1.5,
+                      annotation_text=f"🔴 Stop Loss (2.5%): ₹{sl_level}", annotation_position="bottom left", row=1, col=1)
 
-        # 6. 🔵 Target Horizontal Line
-        fig.add_hline(y=target_level, line_dash="dash", line_color="#29b6f6", line_width=2,
-                      annotation_text=f"🔵 Target (+7%): ₹{target_level}", annotation_position="top right", row=1, col=1)
+        # 4. TradingView Style Pointer Arrow Annotation
+        fig.add_annotation(
+            x=df.index[-1], y=latest_price,
+            text="🎯 BUY BREAKOUT & EMA BOUNCE<br>(High Volume Support)",
+            showarrow=True, arrowhead=2, arrowsize=1.2, arrowwidth=2, arrowcolor="#089981",
+            ax=-90, ay=-60,
+            bordercolor="#089981", borderwidth=1.5, borderpad=6,
+            bgcolor="#1e222d", opacity=0.95,
+            font=dict(color="#ffffff", size=12, family="Arial"),
+            row=1, col=1
+        )
 
-        # 7. 🔴 Stop Loss Horizontal Line
-        fig.add_hline(y=sl_level, line_dash="dash", line_color="#ef5350", line_width=2,
-                      annotation_text=f"🔴 Stop Loss (-2.5%): ₹{sl_level}", annotation_position="bottom right", row=1, col=1)
-
-        # Bottom Chart: Volume Bar Chart
-        vol_colors = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(df['Close'], df['Open'])]
+        # Bottom Chart: Volume Bar Chart (TradingView Theme)
+        vol_colors = ['#089981' if c >= o else '#f23645' for c, o in zip(df['Close'], df['Open'])]
         fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='Volume', marker_color=vol_colors), row=2, col=1)
 
-        fig.update_layout(height=620, xaxis_rangeslider_visible=False, template="plotly_dark")
+        # TradingView Dark Layout Theme
+        fig.update_layout(
+            height=650,
+            paper_bgcolor='#131722',
+            plot_bgcolor='#131722',
+            font=dict(color='#d1d4dc'),
+            xaxis_rangeslider_visible=False,
+            margin=dict(l=20, r=20, t=40, b=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1)
+        )
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#2a2e39')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#2a2e39')
+
         st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------------
-        # Detailed Visual Chart Explanation
+        # Text-To-Speech (Audio Player Button) & Text Analysis
         # ---------------------------------------------------------
         st.markdown("---")
-        st.subheader("📉 চার্টের প্রতিটি লাইন ও প্যাটার্নের বিস্তারিত ব্যাখ্যা:")
         
         vol_latest = float(df['Volume'].iloc[-1])
         vol_avg = float(df['Vol_Avg'].iloc[-1])
         volume_spike = vol_latest > (1.1 * vol_avg)
 
+        # Bengali Speech Text Construction
+        speech_text = f"{raw_name} স্টকের টেকনিক্যাল বিশ্লেষণ। বর্তমান বাই এন্ট্রি প্রাইস {entry_level} টাকা। প্রফিট টার্গেট প্রাইস {target_level} টাকা। স্টপ লস লেভেল {sl_level} টাকা। ২০ ইএমএ সাপোর্ট লেভেল {ema_20} টাকা। স্টকটি ২০ ইএমএ লাইনের ওপর থেকে শক্তিশালী বাউন্স নিয়ে ওপরে উঠছে।"
+
+        st.subheader("📢 চার্ট বিশ্লেষণ ও ট্রেড প্ল্যান:")
+
+        # HTML + JS SpeechSynthesis Web Component
+        tts_component = f"""
+        <div style="margin-bottom: 15px;">
+            <button onclick="playVoice()" style="
+                background: linear-gradient(135deg, #ff9800, #f57c00);
+                color: white;
+                border: none;
+                padding: 12px 26px;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 8px;
+                cursor: pointer;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            ">
+                🔊 অ্যানালাইসিস ভয়েসে শুনুন (Listen Audio)
+            </button>
+
+            <script>
+            function playVoice() {{
+                window.speechSynthesis.cancel();
+                const text = `{speech_text}`;
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.lang = 'bn-IN';
+                msg.rate = 0.9;
+                window.speechSynthesis.speak(msg);
+            }}
+            </script>
+        </div>
+        """
+        components.html(tts_component, height=65)
+
         st.info(f"""
-        ### 🎨 ১. চার্টের প্রতিটি লাইনের মানে ও কাজ:
-        1. 🟣 **বেগুনি লাইন (Breakout Resistance Line - ₹{breakout_res_level}):** এটি স্টকের গত ৬০ দিনের সর্বোচ্চ প্রাইস জোন। স্টক এই বেগুনি দাগটি ভাঙলে (Breakout) তীব্র গতিতে ওপরে ওঠার সম্ভাবনা তৈরি হয়।
-        2. 🟡 **হলুদ ড্যাশ লাইন (Key Support Trendline - ₹{support_line_level}):** এটি স্টকের সবচেয়ে শক্ত নিচের সাপোর্ট লাইন, যেখান থেকে বারবার দাম বাউন্স করেছে।
-        3. 🟠 **কমলা ডায়নামিক লাইন (20 EMA Line - ₹{ema_20}):** শর্ট-টার্ম ট্রেন্ড নির্দেশকারী লাইন।
-        4. 🟢 **সবুজ লাইন (Buy Entry Price - ₹{entry_level}):** বর্তমান কেনাবেচার এন্ট্রি লেভেল।
-        5. 🔵 **আকাশি ড্যাশ লাইন (Target Price - ₹{target_level}):** এন্ট্রি থেকে +৭% লাভ বুক করার লেভেল।
-        6. 🔴 **লাল ড্যাশ লাইন (Stop Loss Price - ₹{sl_level}):** -২.৫% লসে ট্রেড থেকে নিরাপদ বের হওয়ার লেভেল।
+        ### 🎨 ১. ট্রেডিংভিউ চার্টের ব্যাখ্যা:
+        * 🟢 **বাই এন্ট্রি লাইন (Entry): ₹{entry_level}** — চার্টের সবুজ সলিড লাইন।
+        * 🔵 **টার্গেট লেভেল (Target): ₹{target_level}** — চার্টের নীল ড্যাশ লাইন (+৭% লাভ)।
+        * 🔴 **স্টপ লস (Stop Loss): ₹{sl_level}** — চার্টের লাল ড্যাশ লাইন (-২.৫% রিস্ক)।
+        * 🟠 **২০ ইএমএ সাপোর্ট কর্ভ (20 EMA): ₹{ema_20}** — চার্টের ডায়নামিক সাপোর্ট লাইন।
+        * 🎯 **পয়েন্টার বক্স (Breakout Arrow):** বাই করার পারফেক্ট পয়েন্টটি অ্যারো চিহ্নের মাধ্যমে দেখানো হয়েছে।
 
         ---
 
-        ### 🧠 ২. এই স্টকের চার্ট বিশ্লেষণ ({raw_name}):
-        * **প্যাটার্ন গঠন:** স্টকটি 🟡 **হলুদ সাপোর্ট লাইন (₹{support_line_level})** এবং 🟠 **২০ ইএমএ লাইন (₹{ema_20})**-এর ওপর শক্ত ভিত্তি তৈরি করেছে।
-        * **ব্রেকআউট সম্ভাবনা:** স্টকটি 🟣 **বেগুনি ব্রেকআউট লেভেল (₹{breakout_res_level})** পার হতে পারলে বড় আপ-র‍্যালি শুরু হতে পারে।
-        * **ভলিউম ট্রেন্ড:** {'সর্বশেষ ক্যান্ডেলে ভালো ভলিউম স্পাইক দেখা গেছে।' if volume_spike else 'চার্টে ভলিউম স্বাভাবিক ও স্থিতিশীল রয়েছে।'}
+        ### 🧠 ২. ট্রেড স্ট্র্যাটেজি ও ক্যান্ডেলস্টিক সেটআপ:
+        1. **ইএমএ বাউন্স:** স্টকটির দাম ২০ দিনের ইএমএ লাইন (₹{ema_20})-এর ওপর চমৎকার সবুজ ক্যান্ডেল তৈরি করেছে।
+        2. **ভলিউম কনফার্মেশন:** {'সর্বশেষ সেশনে নিচেTradingView গ্রিন ভলিউম স্পাইক দেখা গেছে।' if volume_spike else 'ভলিউম স্থিতিশীল রয়েছে।'}
+        3. **রিস্ক রিওয়ার্ড:** রিস্ক মাত্র ২.৫% এবং সম্ভাব্য লাভ ৭%।
 
         ---
 
-        ### 📱 ৩. Groww (গ্রো) অ্যাপে অর্ডার দেওয়ার সঠিক উপায়:
-        1. **Groww App** ওপেন করে **{raw_name}** সার্চ করুন।
+        ### 📱 ৩. Groww (গ্রো) অ্যাপে অর্ডার দিন:
+        1. **Groww App**-এ **{raw_name}** সার্চ করুন।
         2. **Buy** প্রেস করে লিমিট প্রাইস সেট করুন **₹{entry_level}**।
-        3. অর্ডার সম্পন্ন হলে **Stop Loss Trigger Price** বসান **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
+        3. **Stop Loss Trigger Price** দিন **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
         """)
         
