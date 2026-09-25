@@ -4,16 +4,15 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import requests
 
 # Page Configuration
 st.set_page_config(page_title="Smart Trade Pattern & Chart Analyzer", layout="wide")
 
-st.title("📊 স্মার্ট ট্রেড প্যাটার্ন ও চার্ট অ্যানালাইজার")
+st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার")
 st.caption("অটো-ব্রেকআউট লাইন, সাপোর্ট-রেজিস্ট্যান্স ট্রেন্ডলাইন এবং ক্যান্ডেলস্টিক প্যাটার্ন বিশ্লেষণ")
 
 # ---------------------------------------------------------
-# Exact 10 Sub-Sectors Stock Database (300+ Stocks)
+# Exact 10 Sub-Sectors Stock Database
 # ---------------------------------------------------------
 SECTOR_STOCKS = {
     "1. 🏛️ Banking & Financials": [
@@ -90,28 +89,25 @@ SECTOR_STOCKS = {
 }
 
 # ---------------------------------------------------------
-# Bulletproof Data Fetcher Function
+# Robust Data Fetcher Function
 # ---------------------------------------------------------
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def fetch_stock_data(ticker_symbol):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
     try:
-        session = requests.Session()
-        session.headers.update(headers)
-        t = yf.Ticker(ticker_symbol, session=session)
-        df = t.history(period="6m", interval="1d")
-        if not df.empty and len(df) > 5:
+        df = yf.download(ticker_symbol, period="6m", interval="1d", progress=False, auto_adjust=True)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        if not df.empty and len(df) >= 5:
             return df
     except Exception:
         pass
 
     try:
-        df = yf.download(ticker_symbol, period="6m", interval="1d", progress=False, ignore_tz=True)
+        t = yf.Ticker(ticker_symbol)
+        df = t.history(period="6m", interval="1d")
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        if not df.empty and len(df) > 5:
+        if not df.empty and len(df) >= 5:
             return df
     except Exception:
         pass
@@ -138,7 +134,7 @@ if scan_btn or "scanned_results" not in st.session_state:
         scanned_list = []
         for stock in stocks_in_sector:
             df = fetch_stock_data(stock)
-            if not df.empty and len(df) > 20:
+            if not df.empty and len(df) > 15:
                 df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
                 df['Vol_Avg'] = df['Volume'].rolling(20).mean()
                 
@@ -192,7 +188,7 @@ if selected_stock:
     
     df = fetch_stock_data(selected_stock)
 
-    if not df.empty and len(df) > 30:
+    if not df.empty and len(df) >= 10:
         # Technical Calculation
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['Vol_Avg'] = df['Volume'].rolling(20).mean()
@@ -205,8 +201,8 @@ if selected_stock:
         target_level = round(entry_level * 1.07, 2)    # +7% Target
         sl_level = round(entry_level * 0.975, 2)       # -2.5% Stop Loss
         
-        # Pattern & Trendline Levels Calculation (60 days lookback)
-        recent_df = df.tail(60)
+        # Pattern & Trendline Levels Calculation
+        recent_df = df.tail(60) if len(df) >= 60 else df
         breakout_res_level = round(float(recent_df['High'].max()), 2)
         support_line_level = round(float(recent_df['Low'].min()), 2)
         
@@ -237,11 +233,11 @@ if selected_stock:
             line=dict(color='orange', width=2)
         ), row=1, col=1)
 
-        # 3. 🟣 Breakout Resistance Pattern Line (Swing High Line)
+        # 3. 🟣 Breakout Resistance Pattern Line
         fig.add_hline(y=breakout_res_level, line_dash="solid", line_color="#ab47bc", line_width=2,
                       annotation_text=f"🟣 Breakout Line: ₹{breakout_res_level}", annotation_position="top left", row=1, col=1)
 
-        # 4. 🟡 Key Support Trendline (Swing Low Line)
+        # 4. 🟡 Key Support Trendline
         fig.add_hline(y=support_line_level, line_dash="dash", line_color="#ffee58", line_width=2,
                       annotation_text=f"🟡 Support Line: ₹{support_line_level}", annotation_position="bottom left", row=1, col=1)
 
@@ -265,7 +261,7 @@ if selected_stock:
         st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------------
-        # Detailed Visual Chart Explanation (Line-by-Line Guide)
+        # Detailed Visual Chart Explanation
         # ---------------------------------------------------------
         st.markdown("---")
         st.subheader("📉 চার্টের প্রতিটি লাইন ও প্যাটার্নের বিস্তারিত ব্যাখ্যা:")
@@ -276,27 +272,26 @@ if selected_stock:
 
         st.info(f"""
         ### 🎨 ১. চার্টের প্রতিটি লাইনের মানে ও কাজ:
-        1. 🟣 **বেগুনি লাইন (Breakout Resistance Line - ₹{breakout_res_level}):** এটি স্টকের গত ৬০ দিনের সর্বোচ্চ প্রাইস জোন। স্টক এই বেগুনি দাগটি ভাঙলে (Breakout) তীব্র গতিতে ওপরে ওঠার সম্ভাবনা থাকে।
-        2. 🟡 **হলুদ ড্যাশ লাইন (Key Support Trendline - ₹{support_line_level}):** এটি স্টকের সবচেয়ে শক্ত নিচের সাপোর্ট লাইন। স্টকটির দাম কোনোভাবেই এই লাইনের নিচে যাচ্ছে না, অর্থাৎ এখান থেকে বারবার বাউন্স করছে।
-        3. 🟠 **কমলা ডায়নামিক লাইন (20 EMA Line - ₹{ema_20}):** এটি শর্ট-টার্ম বুলিশ মোমেন্টাম নির্দেশকারী ট্রেন্ডলাইন। দাম এই লাইনের ওপরে থাকা মানে স্টকে বায়াররা বেশ সক্রিয়।
-        4. 🟢 **সবুজ লাইন (Buy Entry Price - ₹{entry_level}):** আপনার বর্তমান বাই এন্ট্রি প্রাইস পয়েন্ট।
+        1. 🟣 **বেগুনি লাইন (Breakout Resistance Line - ₹{breakout_res_level}):** এটি স্টকের সাম্প্রতিক সর্বোচ্চ প্রাইস জোন। স্টক এই বেগুনি দাগটি ভাঙলে (Breakout) দ্রুত দাম বাড়ার সুযোগ তৈরি হয়।
+        2. 🟡 **হলুদ ড্যাশ লাইন (Key Support Trendline - ₹{support_line_level}):** এটি স্টকের শক্তিশালী সাপোর্ট লাইন, যেখান থেকে দাম বারবার বাউন্স করে ওপরে উঠেছে।
+        3. 🟠 **কমলা ডায়নামিক লাইন (20 EMA Line - ₹{ema_20}):** শর্ট-টার্ম ট্রেন্ডলাইন। দাম এর ওপর থাকা মানে বায়িং মোমেন্টাম ভালো রয়েছে।
+        4. 🟢 **সবুজ লাইন (Buy Entry Price - ₹{entry_level}):** বর্তমান কেনাবেচার এন্ট্রি প্রাইস লেভেল।
         5. 🔵 **আকাশি ড্যাশ লাইন (Target Price - ₹{target_level}):** এন্ট্রি থেকে +৭% লাভ বুক করার লেভেল।
-        6. 🔴 **লাল ড্যাশ লাইন (Stop Loss Price - ₹{sl_level}):** ঝুঁকি নিয়ন্ত্রণের জন্য -২.৫% লসে বের হয়ে যাওয়ার লেভেল।
+        6. 🔴 **লাল ড্যাশ লাইন (Stop Loss Price - ₹{sl_level}):** -২.৫% লসে ট্রেড থেকে নিরাপদ বের হওয়ার লেভেল।
 
         ---
 
-        ### 🧠 ২. এই স্টকের বর্তমান চার্ট প্যাটার্ন বিশ্লেষণ ({raw_name}):
-        * **প্যাটার্ন গঠন:** স্টকটি বর্তমানে 🟡 **হলুদ সাপোর্ট লাইন (₹{support_line_level})** এবং 🟠 **২০ ইএমএ লাইন (₹{ema_20})**-এর ওপর শক্ত ভিত্তি তৈরি করেছে।
-        * **ব্রেকআউট সম্ভাবনা:** স্টকটির বর্তমান দাম (₹{latest_price}) থেকে 🟣 **বেগুনি ব্রেকআউট লেভেল (₹{breakout_res_level})** পার হতে পারলে বড় ধরনের মুভমেন্ট তৈরি হবে।
-        * **ভলিউম কনফার্মেশন:** {'সর্বশেষ সেশনে নিচে সবুজ রঙের ভলিউম বার অনেক উঁচুতে উঠেছে, যা বড় প্রাতিষ্ঠানিক বিনিয়োগকারীদের কেনাকাটা নির্দেশ করে।' if volume_spike else 'নিচের চার্টে ভলিউম বার স্বাভাবিক ও স্থির রয়েছে।'}
+        ### 🧠 ২. এই স্টকের চার্ট বিশ্লেষণ ({raw_name}):
+        * **প্যাটার্ন গঠন:** স্টকটি বর্তমানে 🟡 **হলুদ সাপোর্ট লাইন (₹{support_line_level})** এবং 🟠 **২০ ইএমএ লাইন (₹{ema_20})**-এর ওপর শক্ত সাপোর্ট তৈরি করে ট্রেড করছে।
+        * **ব্রেকআউট সম্ভাবনা:** স্টকটি 🟣 **বেগুনি ব্রেকআউট লেভেল (₹{breakout_res_level})** পার হতে পারলে বড় আপ-র‍্যালি শুরু হতে পারে।
+        * **ভলিউম ট্রেন্ড:** {'সর্বশেষ ক্যান্ডেলে ভালো ভলিউম স্পাইক দেখা গেছে।' if volume_spike else 'চার্টে ভলিউম স্বাভাবিক রয়েছে।'}
 
         ---
 
-        ### 📱 ৩. Groww (গ্রো) অ্যাপে ট্রেড নেওয়ার নির্দেশিকা:
-        1. **Groww App** খুলে **{raw_name}** স্টকটি সার্চ করে ওপেন করুন।
-        2. **Buy** অপশনে লিমিট প্রাইস সেট করুন **₹{entry_level}**।
-        3. ট্রেড কেনা সম্পন্ন হলে **Stop Loss Trigger Price** বসান **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
+        ### 📱 ৩. Groww (গ্রো) অ্যাপে অর্ডার দেওয়ার সঠিক উপায়:
+        1. **Groww App** ওপেন করে **{raw_name}** সার্চ করুন।
+        2. **Buy** প্রেস করে লিমিট প্রাইস সেট করুন **₹{entry_level}**।
+        3. অর্ডার কার্যকর হলে **Stop Loss Trigger Price** বসান **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
         """)
     else:
-        st.error(f"❌ '{raw_name}' স্টকের চার্ট ডাটা প্রসেস করতে সমস্যা হচ্ছে। পেজটি একবার রিফ্রেশ দিন।")
-            
+        st.error(f"❌ '{raw_name}' স্টকের ডাটা লোড করতে লাইভ সার্ভারে সমস্যা হচ্ছে, অনুগ্রহ করে পেজটি রিফ্রেশ দিয়ে পুনরায় চেষ্টা করুন।")
