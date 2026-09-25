@@ -697,15 +697,11 @@ if selected_stock:
 
     st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
 
-    tts_html_template = """
-    <div style="margin-bottom: 20px;">
-        <button onclick="playVoice()" style="
-            background: linear-gradient(135deg, #00c853, #009688);
-            color: white;
-            border: none;
-            padding: 14px 28px;
-            font-size: 17px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            box
+    tts_html = (
+        '<div style="margin-bottom: 20px;">'
+        '<button onclick="playVoice()" style="'
+        'background: linear-gradient(135deg, #00c853, #009688); '
+        'color: white; border: none; padding: 14px 28px; font-size: 17px; '
+        'font-weight: bold; border-radius: 8px; cursor: pointer; '
+        'box-shadow: 0 4px 12px rgba(0,200,83,0.3); display: flex; '
+        'ali
