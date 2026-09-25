@@ -182,4 +182,23 @@ if scan_btn:
         )
     else:
         st.warning("আপনার নির্বাচিত প্রাইস ফিল্টারে কোনো স্টক পাওয়া যায়নি।")
-        
+
+
+# চার্টে Entry, Target ও Stop Loss লাইন আঁকার কোড অংশ
+if is_buy:
+    entry_p = latest['Close']
+    target_p = entry_p * 1.07  # ৭% টার্গেট
+    sl_p = entry_p * 0.975     # ২.৫% স্টপ লস
+
+    # 🟢 Entry Line
+    fig.add_hline(y=entry_p, line_dash="solid", line_color="green", 
+                  annotation_text=f"🟢 BUY ENTRY: ₹{entry_p:.2f}", annotation_position="top right", row=1, col=1)
+
+    # 🔵 Target Line
+    fig.add_hline(y=target_p, line_dash="dash", line_color="cyan", 
+                  annotation_text=f"🔵 TARGET (7%): ₹{target_p:.2f}", annotation_position="top right", row=1, col=1)
+
+    # 🔴 Stop Loss Line
+    fig.add_hline(y=sl_p, line_dash="dash", line_color="red", 
+                  annotation_text=f"🔴 STOP LOSS (2.5%): ₹{sl_p:.2f}", annotation_position="bottom right", row=1, col=1)
+    
