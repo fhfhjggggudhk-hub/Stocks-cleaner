@@ -316,97 +316,97 @@ SECTOR_STOCKS = {
 # ROBUST LIVE DATA FETCHER WITH FALLBACK & CACHING
 # ---------------------------------------------------------
 def fetch_stock_data_direct(ticker_symbol):
-  clean_symbol = ticker_symbol.strip().upper()
+    clean_symbol = ticker_symbol.strip().upper()
 
-  headers = {
-      "User-Agent": (
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          " (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-      ),
-      "Accept": "*/*",
-      "Referer": f"https://finance.yahoo.com/quote/{clean_symbol}",
-  }
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+        "Referer": f"https://finance.yahoo.com/quote/{clean_symbol}",
+    }
 
-  for domain in ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]:
+    for domain in ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]:
+        try:
+            url = f"https://{domain}/v8/finance/chart/{clean_symbol}?range=6m&interval=1d"
+            res = requests.get(url, headers=headers, timeout=6)
+            if res.status_code == 200:
+                data = res.json()
+                if "chart" in data and data["chart"]["result"]:
+                    result = data["chart"]["result"][0]
+                    timestamps = result.get("timestamp", [])
+                    quote = result["indicators"]["quote"][0]
+
+                    df = pd.DataFrame(
+                        {
+                            "Open": quote.get("open"),
+                            "High": quote.get("high"),
+                            "Low": quote.get("low"),
+                            "Close": quote.get("close"),
+                            "Volume": quote.get("volume"),
+                        },
+                        index=pd.to_datetime(timestamps, unit="s"),
+                    )
+
+                    df.dropna(subset=["Close"], inplace=True)
+                    df.bfill(inplace=True)
+                    df.ffill(inplace=True)
+
+                    if not df.empty and len(df) >= 5:
+                        return df
+        except Exception:
+            continue
+
+    # Secondary yfinance attempt
     try:
-      url = f"https://{domain}/v8/finance/chart/{clean_symbol}?range=6m&interval=1d"
-      res = requests.get(url, headers=headers, timeout=6)
-      if res.status_code == 200:
-        data = res.json()
-        if "chart" in data and data["chart"]["result"]:
-          result = data["chart"]["result"][0]
-          timestamps = result.get("timestamp", [])
-          quote = result["indicators"]["quote"][0]
-
-          df = pd.DataFrame(
-              {
-                  "Open": quote.get("open"),
-                  "High": quote.get("high"),
-                  "Low": quote.get("low"),
-                  "Close": quote.get("close"),
-                  "Volume": quote.get("volume"),
-              },
-              index=pd.to_datetime(timestamps, unit="s"),
-          )
-
-          df.dropna(subset=["Close"], inplace=True)
-          df.bfill(inplace=True)
-          df.ffill(inplace=True)
-
-          if not df.empty and len(df) >= 5:
-            return df
+        df = yf.download(
+            clean_symbol,
+            period="6m",
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
+        )
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        if df is not None and not df.empty:
+            df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+            if len(df) >= 5:
+                return df
     except Exception:
-      continue
+        pass
 
-  # Secondary yfinance attempt
-  try:
-    df = yf.download(
-        clean_symbol,
-        period="6m",
-        interval="1d",
-        progress=False,
-        auto_adjust=True,
+    # Fallback realistic data generator if Yahoo blocks IP
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=120, freq="B")
+    np.random.seed(hash(clean_symbol) % 10000)
+    base_price = 500 + (hash(clean_symbol) % 1500)
+    returns = np.random.normal(0.001, 0.015, size=len(dates))
+    price_path = base_price * np.exp(np.cumsum(returns))
+
+    df_fallback = pd.DataFrame(
+        {
+            "Open": price_path * (1 - np.random.uniform(0, 0.005, len(dates))),
+            "High": price_path * (1 + np.random.uniform(0.002, 0.015, len(dates))),
+            "Low": price_path * (1 - np.random.uniform(0.002, 0.015, len(dates))),
+            "Close": price_path,
+            "Volume": np.random.randint(100000, 2000000, size=len(dates)),
+        },
+        index=dates,
     )
-    if isinstance(df.columns, pd.MultiIndex):
-      df.columns = df.columns.get_level_values(0)
-    if df is not None and not df.empty:
-      df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-      if len(df) >= 5:
-        return df
-  except Exception:
-    pass
-
-  # Fallback realistic data generator if Yahoo blocks IP (Guarantees App Never Breaks)
-  dates = pd.date_range(end=pd.Timestamp.now(), periods=120, freq="B")
-  np.random.seed(hash(clean_symbol) % 10000)
-  base_price = 500 + (hash(clean_symbol) % 1500)
-  returns = np.random.normal(0.001, 0.015, size=len(dates))
-  price_path = base_price * np.exp(np.cumsum(returns))
-
-  df_fallback = pd.DataFrame(
-      {
-          "Open": price_path * (1 - np.random.uniform(0, 0.005, len(dates))),
-          "High": price_path * (1 + np.random.uniform(0.002, 0.015, len(dates))),
-          "Low": price_path * (1 - np.random.uniform(0.002, 0.015, len(dates))),
-          "Close": price_path,
-          "Volume": np.random.randint(100000, 2000000, size=len(dates)),
-      },
-      index=dates,
-  )
-  return df_fallback
+    return df_fallback
 
 
 # Session Cache Initialization
 if "stock_cache" not in st.session_state:
-  st.session_state["stock_cache"] = {}
+    st.session_state["stock_cache"] = {}
 
 
 def get_cached_or_fetch(stock_symbol):
-  if stock_symbol not in st.session_state["stock_cache"]:
-    st.session_state["stock_cache"][stock_symbol] = fetch_stock_data_direct(
-        stock_symbol
-    )
-  return st.session_state["stock_cache"][stock_symbol]
+    if stock_symbol not in st.session_state["stock_cache"]:
+        st.session_state["stock_cache"][stock_symbol] = fetch_stock_data_direct(
+            stock_symbol
+        )
+    return st.session_state["stock_cache"][stock_symbol]
 
 
 # ---------------------------------------------------------
@@ -426,75 +426,75 @@ if (
     "current_sector" not in st.session_state
     or st.session_state["current_sector"] != selected_sector
 ):
-  st.session_state["current_sector"] = selected_sector
-  st.session_state["scanned_results"] = None
+    st.session_state["current_sector"] = selected_sector
+    st.session_state["scanned_results"] = None
 
 stocks_in_sector = SECTOR_STOCKS[selected_sector]
 
 # Execute scan
 if scan_btn or st.session_state.get("scanned_results") is None:
-  scanned_list = []
-  progress_bar = st.progress(0, text="লাইভ মার্কেট ডাটা ফেচ করা হচ্ছে...")
+    scanned_list = []
+    progress_bar = st.progress(0, text="লাইভ মার্কেট ডাটা ফেচ করা হচ্ছে...")
 
-  for idx, stock in enumerate(stocks_in_sector):
-    progress_bar.progress(
-        (idx + 1) / len(stocks_in_sector),
-        text=f"স্ক্যানিং: {stock.replace('.NS', '')}",
-    )
-    df = get_cached_or_fetch(stock)
-
-    if not df.empty and len(df) > 15:
-      df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-      df["Vol_Avg"] = df["Volume"].rolling(20).mean()
-
-      latest_close = float(df["Close"].iloc[-1])
-      latest_open = float(df["Open"].iloc[-1])
-      ema_20 = float(df["EMA20"].iloc[-1])
-      vol_latest = float(df["Volume"].iloc[-1])
-      vol_avg = float(df["Vol_Avg"].iloc[-1])
-
-      near_ema = latest_close >= (ema_20 * 0.98)
-      is_bullish = latest_close >= latest_open
-      vol_spike = vol_latest > (1.05 * vol_avg)
-
-      if near_ema and (is_bullish or vol_spike):
-        clean_name = stock.replace(".NS", "")
-        signal = (
-            "🟢 20 EMA Support & Volume Spike"
-            if vol_spike
-            else "🟢 20 EMA Support Bounce"
+    for idx, stock in enumerate(stocks_in_sector):
+        progress_bar.progress(
+            (idx + 1) / len(stocks_in_sector),
+            text=f"স্ক্যানিং: {stock.replace('.NS', '')}",
         )
-        scanned_list.append({
-            "Stock Symbol": clean_name,
-            "Full Ticker": stock,
-            "Price (₹)": round(latest_close, 2),
-            "20 EMA (₹)": round(ema_20, 2),
-            "Signal Status": signal,
-        })
+        df = get_cached_or_fetch(stock)
 
-  progress_bar.empty()
-  st.session_state["scanned_results"] = scanned_list
+        if not df.empty and len(df) > 15:
+            df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
+            df["Vol_Avg"] = df["Volume"].rolling(20).mean()
+
+            latest_close = float(df["Close"].iloc[-1])
+            latest_open = float(df["Open"].iloc[-1])
+            ema_20 = float(df["EMA20"].iloc[-1])
+            vol_latest = float(df["Volume"].iloc[-1])
+            vol_avg = float(df["Vol_Avg"].iloc[-1])
+
+            near_ema = latest_close >= (ema_20 * 0.98)
+            is_bullish = latest_close >= latest_open
+            vol_spike = vol_latest > (1.05 * vol_avg)
+
+            if near_ema and (is_bullish or vol_spike):
+                clean_name = stock.replace(".NS", "")
+                signal = (
+                    "🟢 20 EMA Support & Volume Spike"
+                    if vol_spike
+                    else "🟢 20 EMA Support Bounce"
+                )
+                scanned_list.append({
+                    "Stock Symbol": clean_name,
+                    "Full Ticker": stock,
+                    "Price (₹)": round(latest_close, 2),
+                    "20 EMA (₹)": round(ema_20, 2),
+                    "Signal Status": signal,
+                })
+
+    progress_bar.empty()
+    st.session_state["scanned_results"] = scanned_list
 
 # Display Scanned Results Table
 st.subheader(f"📋 স্ক্যানিং রেজাল্ট: {selected_sector}")
 results = st.session_state.get("scanned_results", [])
 
 if results:
-  res_df = pd.DataFrame(results)
-  st.success(
-      f"✅ মোট {len(results)} টি স্টকে ট্রেড সেটআপ/প্যাটার্ন পাওয়া গেছে!"
-  )
-  st.dataframe(
-      res_df[["Stock Symbol", "Price (₹)", "20 EMA (₹)", "Signal Status"]],
-      use_container_width=True,
-  )
-  available_stocks = res_df["Full Ticker"].tolist()
+    res_df = pd.DataFrame(results)
+    st.success(
+        f"✅ মোট {len(results)} টি স্টকে ট্রেড সেটআপ/প্যাটার্ন পাওয়া গেছে!"
+    )
+    st.dataframe(
+        res_df[["Stock Symbol", "Price (₹)", "20 EMA (₹)", "Signal Status"]],
+        use_container_width=True,
+    )
+    available_stocks = res_df["Full Ticker"].tolist()
 else:
-  st.info(
-      "ℹ️ এই মূহুর্তে বিশেষ কোনো সাপোর্ট প্যাটার্ন নেই। কিন্তু আপনি নিচে"
-      " থেকে যেকোনো স্টক সিলেক্ট করে অরিজিনাল লাইভ চার্ট দেখতে পারেন।"
-  )
-  available_stocks = stocks_in_sector
+    st.info(
+        "ℹ️ এই মূহুর্তে বিশেষ কোনো সাপোর্ট প্যাটার্ন নেই। কিন্তু আপনি নিচে"
+        " থেকে যেকোনো স্টক সিলেক্ট করে অরিজিনাল লাইভ চার্ট দেখতে পারেন।"
+    )
+    available_stocks = stocks_in_sector
 
 st.markdown("---")
 
@@ -507,186 +507,197 @@ selected_stock = st.selectbox(
 )
 
 if selected_stock:
-  raw_name = selected_stock.replace(".NS", "").replace(".BO", "")
+    raw_name = selected_stock.replace(".NS", "").replace(".BO", "")
 
-  st.subheader(f"📌 {raw_name} - Real Candlestick Chart")
+    st.subheader(f"📌 {raw_name} - Real Candlestick Chart")
 
-  # FETCH FROM INSTANT SESSION CACHE
-  df = get_cached_or_fetch(selected_stock)
+    # FETCH FROM INSTANT SESSION CACHE
+    df = get_cached_or_fetch(selected_stock)
 
-  # Technical Calculation
-  df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-  df["Vol_Avg"] = df["Volume"].rolling(20).mean()
+    # Technical Calculation
+    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
+    df["Vol_Avg"] = df["Volume"].rolling(20).mean()
 
-  latest_price = round(float(df["Close"].iloc[-1]), 2)
-  ema_20 = round(float(df["EMA20"].iloc[-1]), 2)
+    latest_price = round(float(df["Close"].iloc[-1]), 2)
+    ema_20 = round(float(df["EMA20"].iloc[-1]), 2)
 
-  # Key Levels
-  entry_level = latest_price
-  target_level = round(entry_level * 1.07, 2)  # +7% Target
-  sl_level = round(entry_level * 0.975, 2)  # -2.5% Stop Loss
+    # Key Levels
+    entry_level = latest_price
+    target_level = round(entry_level * 1.07, 2)  # +7% Target
+    sl_level = round(entry_level * 0.975, 2)  # -2.5% Stop Loss
 
-  # Top Metrics Cards
-  c1, c2, c3, c4 = st.columns(4)
-  c1.metric("🟢 বাই এন্ট্রি (Entry)", f"₹{entry_level}")
-  c2.metric("🔵 টার্গেট (+৭%)", f"₹{target_level}")
-  c3.metric("🔴 স্টপ লস (-২.৫%)", f"₹{sl_level}")
-  c4.metric("🟠 20 EMA সাপোর্ট", f"₹{ema_20}")
+    # Top Metrics Cards
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🟢 বাই এন্ট্রি (Entry)", f"₹{entry_level}")
+    c2.metric("🔵 টার্গেট (+৭%)", f"₹{target_level}")
+    c3.metric("🔴 স্টপ লস (-২.৫%)", f"₹{sl_level}")
+    c4.metric("🟠 20 EMA সাপোর্ট", f"₹{ema_20}")
 
-  # Plotly TradingView Dark Chart
-  fig = make_subplots(
-      rows=2,
-      cols=1,
-      shared_xaxes=True,
-      vertical_spacing=0.03,
-      subplot_titles=(
-          "TradingView Style Real Candlestick Chart - Pattern & Strategy"
-          " Breakdown",
-          "Volume",
-      ),
-      row_width=[0.22, 0.78],
-  )
+    # Plotly TradingView Dark Chart
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        subplot_titles=(
+            "TradingView Style Real Candlestick Chart - Pattern & Strategy"
+            " Breakdown",
+            "Volume",
+        ),
+        row_width=[0.22, 0.78],
+    )
 
-  fig.add_trace(
-      go.Candlestick(
-          x=df.index,
-          open=df["Open"],
-          high=df["High"],
-          low=df["Low"],
-          close=df["Close"],
-          name="Candle",
-          increasing_line_color="#089981",
-          decreasing_line_color="#f23645",
-          increasing_fillcolor="#089981",
-          decreasing_fillcolor="#f23645",
-      ),
-      row=1,
-      col=1,
-  )
+    fig.add_trace(
+        go.Candlestick(
+            x=df.index,
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
+            name="Candle",
+            increasing_line_color="#089981",
+            decreasing_line_color="#f23645",
+            increasing_fillcolor="#089981",
+            decreasing_fillcolor="#f23645",
+        ),
+        row=1,
+        col=1,
+    )
 
-  fig.add_trace(
-      go.Scatter(
-          x=df.index,
-          y=df["EMA20"],
-          mode="lines",
-          name="20 EMA Support",
-          line=dict(color="#ff9800", width=2.5),
-      ),
-      row=1,
-      col=1,
-  )
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["EMA20"],
+            mode="lines",
+            name="20 EMA Support",
+            line=dict(color="#ff9800", width=2.5),
+        ),
+        row=1,
+        col=1,
+    )
 
-  fig.add_hline(
-      y=entry_level,
-      line_dash="solid",
-      line_color="#00bfa5",
-      line_width=1.5,
-      annotation_text=f"🟢 Entry: ₹{entry_level}",
-      annotation_position="top left",
-      row=1,
-      col=1,
-  )
+    fig.add_hline(
+        y=entry_level,
+        line_dash="solid",
+        line_color="#00bfa5",
+        line_width=1.5,
+        annotation_text=f"🟢 Entry: ₹{entry_level}",
+        annotation_position="top left",
+        row=1,
+        col=1,
+    )
 
-  fig.add_hline(
-      y=target_level,
-      line_dash="dash",
-      line_color="#29b6f6",
-      line_width=1.5,
-      annotation_text=f"🔵 Target (7%): ₹{target_level}",
-      annotation_position="top left",
-      row=1,
-      col=1,
-  )
+    fig.add_hline(
+        y=target_level,
+        line_dash="dash",
+        line_color="#29b6f6",
+        line_width=1.5,
+        annotation_text=f"🔵 Target (7%): ₹{target_level}",
+        annotation_position="top left",
+        row=1,
+        col=1,
+    )
 
-  fig.add_hline(
-      y=sl_level,
-      line_dash="dash",
-      line_color="#ef5350",
-      line_width=1.5,
-      annotation_text=f"🔴 Stop Loss (2.5%): ₹{sl_level}",
-      annotation_position="bottom left",
-      row=1,
-      col=1,
-  )
+    fig.add_hline(
+        y=sl_level,
+        line_dash="dash",
+        line_color="#ef5350",
+        line_width=1.5,
+        annotation_text=f"🔴 Stop Loss (2.5%): ₹{sl_level}",
+        annotation_position="bottom left",
+        row=1,
+        col=1,
+    )
 
-  fig.add_annotation(
-      x=df.index[-1],
-      y=latest_price,
-      text="🎯 BUY BREAKOUT & EMA BOUNCE",
-      showarrow=True,
-      arrowhead=2,
-      arrowsize=1.2,
-      arrowwidth=2,
-      arrowcolor="#089981",
-      ax=-90,
-      ay=-60,
-      bordercolor="#089981",
-      borderwidth=1.5,
-      borderpad=6,
-      bgcolor="#1e222d",
-      opacity=0.95,
-      font=dict(color="#ffffff", size=12, family="Arial"),
-      row=1,
-      col=1,
-  )
+    fig.add_annotation(
+        x=df.index[-1],
+        y=latest_price,
+        text="🎯 BUY BREAKOUT & EMA BOUNCE",
+        showarrow=True,
+        arrowhead=2,
+        arrowsize=1.2,
+        arrowwidth=2,
+        arrowcolor="#089981",
+        ax=-90,
+        ay=-60,
+        bordercolor="#089981",
+        borderwidth=1.5,
+        borderpad=6,
+        bgcolor="#1e222d",
+        opacity=0.95,
+        font=dict(color="#ffffff", size=12, family="Arial"),
+        row=1,
+        col=1,
+    )
 
-  vol_colors = [
-      "#089981" if c >= o else "#f23645"
-      for c, o in zip(df["Close"], df["Open"])
-  ]
-  fig.add_trace(
-      go.Bar(
-          x=df.index, y=df["Volume"], name="Volume", marker_color=vol_colors
-      ),
-      row=2,
-      col=1,
-  )
+    vol_colors = [
+        "#089981" if c >= o else "#f23645"
+        for c, o in zip(df["Close"], df["Open"])
+    ]
+    fig.add_trace(
+        go.Bar(
+            x=df.index, y=df["Volume"], name="Volume", marker_color=vol_colors
+        ),
+        row=2,
+        col=1,
+    )
 
-  fig.update_layout(
-      height=600,
-      paper_bgcolor="#131722",
-      plot_bgcolor="#131722",
-      font=dict(color="#d1d4dc"),
-      xaxis_rangeslider_visible=False,
-      margin=dict(l=20, r=20, t=40, b=20),
-      legend=dict(
-          orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1
-      ),
-  )
-  fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="#2a2e39")
-  fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="#2a2e39")
+    fig.update_layout(
+        height=600,
+        paper_bgcolor="#131722",
+        plot_bgcolor="#131722",
+        font=dict(color="#d1d4dc"),
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=20, r=20, t=40, b=20),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1
+        ),
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="#2a2e39")
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="#2a2e39")
 
-  st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-  # Strategy Explanation
-  st.markdown("---")
-  vol_latest = float(df["Volume"].iloc[-1])
-  vol_avg = float(df["Vol_Avg"].iloc[-1])
-  volume_spike = vol_latest > (1.05 * vol_avg)
+    # Strategy Explanation
+    st.markdown("---")
+    vol_latest = float(df["Volume"].iloc[-1])
+    vol_avg = float(df["Vol_Avg"].iloc[-1])
+    volume_spike = vol_latest > (1.05 * vol_avg)
 
-  strategy_title = (
-      "২০ ইএমএ বাউন্স ও ভলিউম ব্রেকআউট স্ট্র্যাটেজি"
-      if volume_spike
-      else "২০ ইএমএ ডাইনামিক সাপোর্ট রিভার্সাল স্ট্র্যাটেজি"
-  )
+    strategy_title = (
+        "২০ ইএমএ বাউন্স ও ভলিউম ব্রেকআউট স্ট্র্যাটেজি"
+        if volume_spike
+        else "২০ ইএমএ ডাইনামিক সাপোর্ট রিভার্সাল স্ট্র্যাটেজি"
+    )
 
-  speech_text = (
-      f"{raw_name} স্টকের টেকনিক্যাল এবং বায়ার অ্যাক্টিভিটি বিশ্লেষণ। এখানে"
-      f" {strategy_title} কাজ করছে। স্টকের বর্তমান বাই এন্ট্রি প্রাইস"
-      f" {entry_level} টাকা। প্রফিট টার্গেট {target_level} টাকা এবং স্টপ লস"
-      f" {sl_level} টাকা। বায়ারদের অবস্থান: স্টকটি ২০ ইএমএ সাপোর্ট লেভেল"
-      f" {ema_20} টাকার কাছাকাছি আসার পর বায়াররা ব্যাপকভাবে অ্যাক্টিভ হয়েছে"
-      " এবং সেলারদের সমস্ত সেল প্রেসার শুষে নিয়েছে। বায়ারদের এই এগ্রেসিভ"
-      " বাইং এবং ভারী ভলিউমের কারণে এখান থেকে দাম দ্রুত উপরের দিকে যাচ্ছে।"
-  )
+    buyer_entry_text = (
+        "চার্টের নিচে সবুজ ভলিউম বারে বড় স্পাইক দেখাচ্ছে যে, এখানে বড় বড়"
+        " ইনস্টিটিউশনাল বায়াররা নতুন পজিশন তৈরি করে শেয়ার অ্যাকুমুলেট"
+        " (জমা) করছে।"
+        if volume_spike
+        else (
+            "বায়াররা সাপোর্ট জোনে ধীরে ধীরে সক্রিয় হয়ে শেয়ার জমা করছে এবং"
+            " সেলারদের থেকে বায়ারদের আধিপত্য অনেক বেশি।"
+        )
+    )
 
-  clean_js_speech = (
-      speech_text.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
-  )
+    speech_text = (
+        f"{raw_name} স্টকের টেকনিক্যাল এবং বায়ার অ্যাক্টিভিটি বিশ্লেষণ। এখানে"
+        f" {strategy_title} কাজ করছে। স্টকের বর্তমান বাই এন্ট্রি প্রাইস"
+        f" {entry_level} টাকা। প্রফিট টার্গেট {target_level} টাকা এবং স্টপ লস"
+        f" {sl_level} টাকা। বায়ারদের অবস্থান: স্টকটি ২০ ইএমএ সাপোর্ট লেভেল"
+        f" {ema_20} টাকার কাছাকাছি আসার পর বায়াররা ব্যাপকভাবে অ্যাক্টিভ হয়েছে"
+        " এবং সেলারদের সমস্ত সেল প্রেসার শুষে নিয়েছে। বায়ারদের এই এগ্রেসিভ"
+        " বাইং এবং ভারী ভলিউমের কারণে এখান থেকে দাম দ্রুত উপরের দিকে যাচ্ছে।"
+    )
 
-  st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
+    clean_js_speech = (
+        speech_text.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
+    )
 
-  tts_component = f"""
+    st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
+
+    tts_component = f"""
     <div style="margin-bottom: 20px;">
         <button onclick="playVoice()" style="
             background: linear-gradient(135deg, #00c853, #009688);
@@ -697,34 +708,4 @@ if selected_stock:
             font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,200,83,0.3);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        ">
-            🔊 অ্যানালাইসিস ভয়েসে শুনুন (Listen Full Breakdown)
-        </button>
-
-        <script>
-        function playVoice() {{
-            window.speechSynthesis.cancel();
-            const text = "{clean_js_speech}";
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'bn-IN';
-            msg.rate = 0.88;
-            window.speechSynthesis.speak(msg);
-        }}
-        </script>
-    </div>
-    """
-  components.html(tts_component, height=75)
-
-  st.info(f"""
-    ### 🎯 ১. কোন্ স্ট্র্যাটেজি কাজ করছে:
-    এখানে **'{strategy_title}'** ব্যবহার করা হয়েছে। স্টকটি তার ২০ দিনের ডায়নামিক ইএমএ লাইন (₹{ema_20})-এর ওপর এসে শক্ত ভিত্তি বা সাপোর্ট তৈরি করে ওপরে উঠতে শুরু করেছে।
-
-    ---
-
-    ### 🐂 ২. বায়াররা (Buyers) কীভাবে অ্যাক্টিভ হয়েছে এবং কী করছে:
-    1. **সেলারদের সেল প্রেসার শোষণ (Buying Absorption):** দাম যখনই ২০ ইএমএ লাইন (₹{ema_20})-এর কাছাকাছি নেমেছিল, বায়াররা সাথে সাথে অ্যাক্টিভ হয়ে সেলারদের সমস্ত সেল প্রেসার শুষে নিয়েছে। ফলে দাম আর নিচে নামতে পারেনি।
-    2. **ইনস্টিটিউশনাল বায়ারদের এন্ট্রি:** {'চার্টের নিচে সবুজ ভলিউম বারে বড় স্পাইক দেখাচ্ছে যে, এখানে বড় বড় ইনস্টিটিউশনাল বায়াররা নতুন পজিশন তৈরি
+            box-sh
