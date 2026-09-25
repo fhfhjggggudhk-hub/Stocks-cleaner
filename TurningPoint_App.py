@@ -2,20 +2,22 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
-# Page Configuration
-st.set_page_config(page_title="1-Week Swing Screener - Turning Point", layout="wide")
+# Page Setup
+st.set_page_config(page_title="Stock Pattern Scanner", layout="wide")
 
-st.title("🎯 Turning Point - 1-Week Swing Trading Screener")
-st.caption("Smart Money Accumulation & High Probability Reversal Setup (3-7 Days Holding)")
+st.title("🎯 Stock Pattern Scanner")
+st.write("১০টি সাব-সেক্টরের প্রপার লিকুইড স্টকের অল-প্রাইস ক্যান্ডেলস্টিক ও সুইং স্ক্যানার। কালার-ট্যাগিং ও সরাসরি ট্রেডিংভিউ লিঙ্ক সুবিধাসহ।")
 
 # ---------------------------------------------------------
-# Sector & Sub-Sector Stock Lists
+# Stock Database
 # ---------------------------------------------------------
 SECTOR_STOCKS = {
-    "1. Energy, Power & Capital Goods (আপনার দেওয়া তালিকা)": [
+    "🏛️ 1. Banking, Finance & NBFC": [
+        "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS",
+        "BAJFINANCE.NS", "BAJAJFINSV.NS", "JIOFIN.NS", "PFC.NS", "RECLTD.NS", "PNB.NS", "BANKBARODA.NS"
+    ],
+    "⚡ 2. Energy, Power & Capital Goods": [
         "TDPOWERSYS.NS", "KIRLOSENG.NS", "TRIVENI.NS", "PRAJIND.NS", "GAIL.NS",
         "PETRONET.NS", "MGL.NS", "IGL.NS", "GUJGASLTD.NS", "ATGL.NS", "GSPL.NS",
         "RELIANCE.NS", "ONGC.NS", "OIL.NS", "ABB.NS", "ADANIGREEN.NS", "ADANIPOWER.NS",
@@ -25,39 +27,47 @@ SECTOR_STOCKS = {
         "SCHNEIDER.NS", "SIEMENS.NS", "SJVN.NS", "SUZLON.NS", "TATAPOWER.NS",
         "THERMAX.NS", "TORNTPOWER.NS"
     ],
-    "2. Banking & Finance (ব্যাংকিং ও ফাইন্যান্স)": [
-        "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS",
-        "BAJFINANCE.NS", "BAJAJFINSV.NS", "JIOFIN.NS", "PFC.NS", "RECLTD.NS", "PNB.NS", "BANKBARODA.NS"
-    ],
-    "3. IT & Technology (আইটি ও টেকনোলজি)": [
+    "💻 3. IT & Technology": [
         "TCS.NS", "INFY.NS", "HCLTECH.NS", "WIPRO.NS", "TECHM.NS",
         "PERSISTENT.NS", "LTIM.NS", "COFORGE.NS", "KPITTECH.NS", "TATAELXSI.NS"
     ],
-    "4. Auto & Components (অটো ও পার্টস)": [
+    "🚗 4. Auto & Components": [
         "TATAMOTORS.NS", "MARUTI.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS",
         "EICHERMOT.NS", "BHARATFORG.NS", "MOTHERSON.NS", "TVSMOTOR.NS", "BOSCHLTD.NS"
     ],
-    "5. Pharma & Healthcare (ফার্মা ও হেলথকেয়ার)": [
+    "💊 5. Pharma & Healthcare": [
         "SUNPHARMA.NS", "CIPLA.NS", "DRREDDY.NS", "DIVISLAB.NS", "APOLLOHOSP.NS",
         "LUPIN.NS", "TORNTPHARM.NS", "MANKIND.NS", "MAXHEALTH.NS", "AUROPHARMA.NS"
     ],
-    "6. Metals & Mining (ধাতু ও মাইনিং)": [
+    "🏗️ 6. Metals & Mining": [
         "TATASTEEL.NS", "JSWSTEEL.NS", "HINDALCO.NS", "VEDL.NS", "JINDALSTEL.NS",
         "NMDC.NS", "NATIONALUM.NS", "SAIL.NS"
     ],
-    "7. FMCG & Consumer (কনজিউমার গুডস)": [
+    "🛒 7. FMCG & Consumer Goods": [
         "ITC.NS", "HINDUNILVR.NS", "NESTLEIND.NS", "BRITANNIA.NS", "TATACONSUM.NS",
         "TRENT.NS", "VBL.NS", "DMART.NS", "GODREJCP.NS", "DABUR.NS"
     ]
 }
 
 # ---------------------------------------------------------
-# Technical Strategy Calculations
+# UI Elements (Matching Screenshot Layout)
 # ---------------------------------------------------------
-def calculate_indicators(df):
+selected_sector = st.selectbox("একটি সাব-সেক্টর বেছে নিন:", list(SECTOR_STOCKS.keys()))
+
+timeframe = st.selectbox("ক্যান্ডেল টাইমফ্রেম (Timeframe):", ["1 Day (Daily)", "1 Week (Weekly)"])
+
+price_filters = st.multiselect(
+    "🎯 যে প্রাইস রেঞ্জের স্টক অ্যাপে দেখতে চান তা টিক দিন:",
+    ["🟢 Below ₹500", "🟡 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000"],
+    default=["🟢 Below ₹500", "🟡 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000"]
+)
+
+# Robust Technical Indicator Calculation
+def analyze_stock(df):
+    if df.empty or len(df) < 20:
+        return None
+        
     df = df.copy()
-    
-    # Ensure standard column names
     if 'Close' not in df.columns and 'Adj Close' in df.columns:
         df['Close'] = df['Adj Close']
         
@@ -70,155 +80,106 @@ def calculate_indicators(df):
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     
-    df['Body'] = abs(df['Close'] - df['Open'])
-    df['Lower_Wick'] = np.where(df['Close'] >= df['Open'], df['Open'] - df['Low'], df['Close'] - df['Low'])
-    df['Range'] = df['High'] - df['Low']
+    latest = df.iloc[-1]
     
-    cond1 = (df['Low'] <= df['EMA20'] * 1.01) & (df['Close'] >= df['EMA20'])
-    cond2 = df['Volume'] >= 1.25 * df['Vol_Avg20']
-    cond3 = (df['Lower_Wick'] >= 0.35 * df['Range']) | (df['RSI'] <= 45)
+    # Reversal Strategy Conditions
+    cond1 = (latest['Low'] <= latest['EMA20'] * 1.01) and (latest['Close'] >= latest['EMA20'])
+    cond2 = latest['Volume'] >= 1.2 * latest['Vol_Avg20']
     
-    df['BUY_SIGNAL'] = cond1 & cond2 & cond3
-    return df
+    is_buy = cond1 and cond2
+    
+    return {
+        "LTP": float(latest['Close']),
+        "RSI": float(latest['RSI']),
+        "EMA20": float(latest['EMA20']),
+        "Signal": "🟢 Buy Reversal" if is_buy else "⚪ Neutral"
+    }
 
-# Anti-Blocking Multi-Method Data Fetcher
-@st.cache_data(ttl=600)
-def load_data(ticker):
-    # Method 1: Ticker History
+# Fetch Stock Data safely
+def fetch_data(symbol, tf_str):
+    interval = "1d" if "Day" in tf_str else "1wk"
+    period = "6m" if "Day" in tf_str else "1y"
+    
     try:
-        t = yf.Ticker(ticker)
-        data = t.history(period="6m", interval="1d", auto_adjust=True)
-        if not data.empty and len(data) > 15:
+        t = yf.Ticker(symbol)
+        data = t.history(period=period, interval=interval, auto_adjust=True)
+        if not data.empty:
             return data
     except Exception:
         pass
-        
-    # Method 2: Download with Ignore TZ
-    try:
-        data = yf.download(ticker, period="6m", interval="1d", progress=False, ignore_tz=True)
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-        if not data.empty and len(data) > 15:
-            return data
-    except Exception:
-        pass
-
     return pd.DataFrame()
 
-# ---------------------------------------------------------
-# Sidebar Controls
-# ---------------------------------------------------------
-st.sidebar.header("🔍 সাব-সেক্টর ও স্টক নির্বাচন")
+# Scan Execution Button
+scan_btn = st.button("🔍 স্ক্যান শুরু করুন", type="primary", use_container_width=True)
 
-selected_sector = st.sidebar.selectbox("১. সাব-সেক্টর বেছে নিন:", list(SECTOR_STOCKS.keys()))
-stock_list = SECTOR_STOCKS[selected_sector]
-
-search_mode = st.sidebar.radio("২. দেখার মোড:", ["সেক্টর লিস্ট থেকে", "যেকোনো স্টক সার্চ করুন (5000+)"])
-
-if search_mode == "সেক্টর লিস্ট থেকে":
-    selected_stock = st.sidebar.selectbox("স্টক নির্বাচন করুন:", stock_list)
-else:
-    custom_symbol = st.sidebar.text_input("NSE/BSE কাস্টম স্টক নাম (যেমন: TATAPOWER.NS):", "TATAPOWER.NS")
-    selected_stock = custom_symbol.strip().upper()
-
-run_scanner = st.sidebar.button("🚀 এই সেক্টর স্ক্যান করুন")
-
-# ---------------------------------------------------------
-# Main App Execution & Chart Rendering
-# ---------------------------------------------------------
-if selected_stock:
-    data = load_data(selected_stock)
+if scan_btn:
+    stocks_to_scan = SECTOR_STOCKS[selected_sector]
+    st.subheader(f"📊 স্ক্যান রেজাল্ট - {selected_sector}")
     
-    if not data.empty and len(data) > 20:
-        df = calculate_indicators(data)
-        latest = df.iloc[-1]
+    results = []
+    progress = st.progress(0)
+    
+    for idx, symbol in enumerate(stocks_to_scan):
+        df_stock = fetch_data(symbol, timeframe)
+        analysis = analyze_stock(df_stock)
         
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("বর্তমান দাম (LTP)", f"₹{latest['Close']:.2f}")
-        col2.metric("RSI (14)", f"{latest['RSI']:.1f}")
-        col3.metric("20 EMA", f"₹{latest['EMA20']:.2f}")
+        raw_name = symbol.replace(".NS", "").replace(".BO", "")
+        # TradingView Direct Link Formulation
+        tv_link = f"https://in.tradingview.com/chart/?symbol=NSE:{raw_name}"
         
-        is_buy = latest['BUY_SIGNAL']
-        if is_buy:
-            col4.error("🔥 SMART MONEY BUY ZONE (১ সপ্তাহ)")
-        else:
-            col4.info("⏳ Neutral / Waiting for Signal")
-
-        # TradingView Style Interactive Chart
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                            vertical_spacing=0.08, 
-                            subplot_titles=(f'{selected_stock} - 1-Week Swing Trading Chart', 'Volume Profile'),
-                            row_width=[0.25, 0.75])
-
-        fig.add_trace(go.Candlestick(
-            x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-            name='Price'
-        ), row=1, col=1)
-
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['EMA20'], mode='lines', name='20 EMA', line=dict(color='orange', width=1.5)
-        ), row=1, col=1)
-
-        buy_signals = df[df['BUY_SIGNAL']]
-        fig.add_trace(go.Scatter(
-            x=buy_signals.index,
-            y=buy_signals['Low'] * 0.985,
-            mode='markers+text',
-            name='Smart Money Buy Point',
-            marker=dict(symbol='triangle-up', size=14, color='green'),
-            text=['BUY' for _ in range(len(buy_signals))],
-            textposition='bottom center'
-        ), row=1, col=1)
-
-        if is_buy:
-            entry_price = latest['Close']
-            target_price = entry_price * 1.07
-            sl_price = entry_price * 0.975
-
-            fig.add_hline(y=target_price, line_dash="dash", line_color="cyan", annotation_text=f"Target (7%): ₹{target_price:.2f}", row=1, col=1)
-            fig.add_hline(y=sl_price, line_dash="dash", line_color="red", annotation_text=f"Stop Loss (2.5%): ₹{sl_price:.2f}", row=1, col=1)
-
-        colors = ['green' if c >= o else 'red' for c, o in zip(df['Close'], df['Open'])]
-        fig.add_trace(go.Bar(
-            x=df.index, y=df['Volume'], name='Volume', marker_color=colors
-        ), row=2, col=1)
-
-        fig.update_layout(height=650, xaxis_rangeslider_visible=False, template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
-
-    else:
-        st.warning(f"'{selected_stock}' স্টকের ডাটা ডাউনলোড হতে সাময়িক দেরি হচ্ছে। অনুগ্রহ করে ২-৩ সেকেন্ড পর পেজটি একবার রিফ্রেশ দিন বা অন্য স্টক সিলেক্ট করে দেখুন।")
-
-# ---------------------------------------------------------
-# Sector Auto Scanner
-# ---------------------------------------------------------
-if run_scanner:
-    st.subheader(f"⚡ {selected_sector} - বায়িং পজিশনে থাকা স্টকসমূহ")
-    scan_results = []
-    
-    progress_bar = st.progress(0)
-    total = len(stock_list)
-    
-    for idx, ticker in enumerate(stock_list):
-        s_data = load_data(ticker)
-        if not s_data.empty and len(s_data) > 20:
-            s_df = calculate_indicators(s_data)
-            s_latest = s_df.iloc[-1]
+        if analysis:
+            ltp = analysis['LTP']
             
-            if s_latest['BUY_SIGNAL']:
-                entry = s_latest['Close']
-                scan_results.append({
-                    "Stock": ticker.replace(".NS", "").replace(".BO", ""),
-                    "LTP (₹)": round(entry, 2),
-                    "RSI": round(s_latest['RSI'], 1),
-                    "Target (7%)": round(entry * 1.07, 2),
-                    "Stop-Loss (2.5%)": round(entry * 0.975, 2),
-                    "Signal": "🟢 Buy Reversal"
+            # Price Filter Check
+            include = False
+            price_tag = ""
+            if ltp < 500 and "🟢 Below ₹500" in price_filters:
+                include = True
+                price_tag = "Below ₹500"
+            elif 500 <= ltp <= 2000 and "🟡 In Range (₹500 - ₹2,000)" in price_filters:
+                include = True
+                price_tag = "₹500 - ₹2,000"
+            elif ltp > 2000 and "🔴 Above ₹2,000" in price_filters:
+                include = True
+                price_tag = "Above ₹2,000"
+                
+            if include:
+                results.append({
+                    "Stock Symbol": raw_name,
+                    "LTP (₹)": round(ltp, 2),
+                    "Price Category": price_tag,
+                    "RSI (14)": round(analysis['RSI'], 1),
+                    "Signal": analysis['Signal'],
+                    "TradingView App Direct Link": tv_link
                 })
-        progress_bar.progress((idx + 1) / total)
-    
-    if scan_results:
-        st.dataframe(pd.DataFrame(scan_results), use_container_width=True)
-    else:
-        st.info(f"আজকের দিনে '{selected_sector}' এর কোনো স্টকে ১-সপ্তাহের কনফার্মড বাই সিগন্যাল পাওয়া যায়নি।")
+        else:
+            # Fallback direct link row if data fetch delays
+            results.append({
+                "Stock Symbol": raw_name,
+                "LTP (₹)": "Check TV",
+                "Price Category": "N/A",
+                "RSI (14)": "N/A",
+                "Signal": "⚠️ Tap TV Link",
+                "TradingView App Direct Link": tv_link
+            })
             
+        progress.progress((idx + 1) / len(stocks_to_scan))
+        
+    if results:
+        res_df = pd.DataFrame(results)
+        
+        # Display nicely with clickable links to TradingView
+        st.dataframe(
+            res_df,
+            column_config={
+                "TradingView App Direct Link": st.column_config.LinkColumn(
+                    "📈 Open in TradingView",
+                    display_text="Open Chart ↗"
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.warning("আপনার নির্বাচিত প্রাইস ফিল্টারে কোনো স্টক পাওয়া যায়নি।")
+        
