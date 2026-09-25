@@ -62,9 +62,34 @@ price_filters = st.multiselect(
     default=["🟢 Below ₹500", "🟡 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000"]
 )
 
-# Robust Technical Indicator Calculation
+# Fetch Stock Data safely
+@st.cache_data(ttl=600)
+def fetch_data(symbol, tf_str):
+    interval = "1d" if "Day" in tf_str else "1wk"
+    period = "6m" if "Day" in tf_str else "1y"
+    
+    try:
+        t = yf.Ticker(symbol)
+        data = t.history(period=period, interval=interval, auto_adjust=True)
+        if not data.empty and len(data) > 10:
+            return data
+    except Exception:
+        pass
+        
+    try:
+        data = yf.download(symbol, period=period, interval=interval, progress=False, ignore_tz=True)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+        if not data.empty and len(data) > 10:
+            return data
+    except Exception:
+        pass
+        
+    return pd.DataFrame()
+
+# Technical Indicator Calculation
 def analyze_stock(df):
-    if df.empty or len(df) < 20:
+    if df.empty or len(df) < 15:
         return None
         
     df = df.copy()
@@ -84,30 +109,17 @@ def analyze_stock(df):
     
     # Reversal Strategy Conditions
     cond1 = (latest['Low'] <= latest['EMA20'] * 1.01) and (latest['Close'] >= latest['EMA20'])
-    cond2 = latest['Volume'] >= 1.2 * latest['Vol_Avg20']
+    cond2 = latest['Volume'] >= 1.1 * latest['Vol_Avg20']
     
-    is_buy = cond1 and cond2
+    is_buy = bool(cond1 and cond2)
     
     return {
         "LTP": float(latest['Close']),
         "RSI": float(latest['RSI']),
         "EMA20": float(latest['EMA20']),
+        "is_buy": is_buy,
         "Signal": "🟢 Buy Reversal" if is_buy else "⚪ Neutral"
     }
-
-# Fetch Stock Data safely
-def fetch_data(symbol, tf_str):
-    interval = "1d" if "Day" in tf_str else "1wk"
-    period = "6m" if "Day" in tf_str else "1y"
-    
-    try:
-        t = yf.Ticker(symbol)
-        data = t.history(period=period, interval=interval, auto_adjust=True)
-        if not data.empty:
-            return data
-    except Exception:
-        pass
-    return pd.DataFrame()
 
 # Scan Execution Button
 scan_btn = st.button("🔍 স্ক্যান শুরু করুন", type="primary", use_container_width=True)
@@ -124,13 +136,11 @@ if scan_btn:
         analysis = analyze_stock(df_stock)
         
         raw_name = symbol.replace(".NS", "").replace(".BO", "")
-        # TradingView Direct Link Formulation
         tv_link = f"https://in.tradingview.com/chart/?symbol=NSE:{raw_name}"
         
-        if analysis:
+        if analysis is not None:
             ltp = analysis['LTP']
             
-            # Price Filter Check
             include = False
             price_tag = ""
             if ltp < 500 and "🟢 Below ₹500" in price_filters:
@@ -153,7 +163,6 @@ if scan_btn:
                     "TradingView App Direct Link": tv_link
                 })
         else:
-            # Fallback direct link row if data fetch delays
             results.append({
                 "Stock Symbol": raw_name,
                 "LTP (₹)": "Check TV",
@@ -167,8 +176,6 @@ if scan_btn:
         
     if results:
         res_df = pd.DataFrame(results)
-        
-        # Display nicely with clickable links to TradingView
         st.dataframe(
             res_df,
             column_config={
@@ -182,23 +189,4 @@ if scan_btn:
         )
     else:
         st.warning("আপনার নির্বাচিত প্রাইস ফিল্টারে কোনো স্টক পাওয়া যায়নি।")
-
-
-# চার্টে Entry, Target ও Stop Loss লাইন আঁকার কোড অংশ
-if is_buy:
-    entry_p = latest['Close']
-    target_p = entry_p * 1.07  # ৭% টার্গেট
-    sl_p = entry_p * 0.975     # ২.৫% স্টপ লস
-
-    # 🟢 Entry Line
-    fig.add_hline(y=entry_p, line_dash="solid", line_color="green", 
-                  annotation_text=f"🟢 BUY ENTRY: ₹{entry_p:.2f}", annotation_position="top right", row=1, col=1)
-
-    # 🔵 Target Line
-    fig.add_hline(y=target_p, line_dash="dash", line_color="cyan", 
-                  annotation_text=f"🔵 TARGET (7%): ₹{target_p:.2f}", annotation_position="top right", row=1, col=1)
-
-    # 🔴 Stop Loss Line
-    fig.add_hline(y=sl_p, line_dash="dash", line_color="red", 
-                  annotation_text=f"🔴 STOP LOSS (2.5%): ₹{sl_p:.2f}", annotation_position="bottom right", row=1, col=1)
-    
+                           
