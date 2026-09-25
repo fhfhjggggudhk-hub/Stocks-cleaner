@@ -10,8 +10,8 @@ import streamlit.components.v1 as components
 # Page Configuration
 st.set_page_config(page_title="Smart Trade Pattern & Chart Analyzer", layout="wide")
 
-st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার")
-st.caption("TradingView স্টাইল চার্ট, বায়ার অ্যাক্টিভিটি অ্যানালাইসিস এবং ভয়েস রিডআউট সুবিধা")
+st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার (Real Live Data)")
+st.caption("অরিজিনাল লাইভ ডাটা, TradingView চার্ট, বায়ার অ্যাক্টিভিটি অ্যানালাইসিস এবং ভয়েস রিডআউট")
 
 # ---------------------------------------------------------
 # Exact 10 Sub-Sectors Stock Database
@@ -91,16 +91,38 @@ SECTOR_STOCKS = {
 }
 
 # ---------------------------------------------------------
-# Fail-Safe Data Fetcher
+# REAL LIVE DATA FETCHER (NO FAKE/SYNTHETIC FALLBACK)
 # ---------------------------------------------------------
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_stock_data(ticker_symbol):
+    # Method 1: yfinance Ticker Direct
+    try:
+        tk = yf.Ticker(ticker_symbol)
+        df = tk.history(period="6m", interval="1d")
+        if df is not None and not df.empty and len(df) >= 5:
+            df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
+            return df
+    except Exception:
+        pass
+
+    # Method 2: yfinance download
+    try:
+        df = yf.download(ticker_symbol, period="6m", interval="1d", progress=False, auto_adjust=True)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        if df is not None and not df.empty and len(df) >= 5:
+            df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
+            return df
+    except Exception:
+        pass
+
+    # Method 3: Direct Yahoo Finance Query API with Headers
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
         }
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=6m&interval=1d"
-        res = requests.get(url, headers=headers, timeout=8)
+        res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200:
             data = res.json()
             result = data['chart']['result'][0]
@@ -121,31 +143,8 @@ def fetch_stock_data(ticker_symbol):
     except Exception:
         pass
 
-    try:
-        df = yf.download(ticker_symbol, period="6m", interval="1d", progress=False, auto_adjust=True)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        if not df.empty and len(df) >= 5:
-            return df
-    except Exception:
-        pass
-
-    # Synthetic fallback for smooth display
-    dates = pd.date_range(end=pd.Timestamp.now(), periods=120, freq='B')
-    base_price = 1730.0 if "HDFC" in ticker_symbol else 1000.0
-    np.random.seed(sum(ord(c) for c in ticker_symbol))
-    returns = np.random.normal(0.0005, 0.012, len(dates))
-    price_path = base_price * np.exp(np.cumsum(returns))
-    
-    df = pd.DataFrame({
-        'Open': price_path * (1 - 0.003),
-        'High': price_path * (1 + 0.008),
-        'Low': price_path * (1 - 0.008),
-        'Close': price_path,
-        'Volume': np.random.randint(1000000, 5000000, len(dates))
-    }, index=dates)
-    
-    return df
+    # Return Empty DataFrame if Live Data Fails (Strictly NO FAKE DATA)
+    return pd.DataFrame()
 
 # ---------------------------------------------------------
 # Sidebar Navigation
@@ -163,7 +162,7 @@ stocks_in_sector = SECTOR_STOCKS[selected_sector]
 if scan_btn or "scanned_results" not in st.session_state:
     st.session_state["scanned_results"] = []
     
-    with st.spinner(f"'{selected_sector}' এর স্টকগুলো স্ক্যান করা হচ্ছে..."):
+    with st.spinner(f"'{selected_sector}' এর অরিজিনাল ডাটা স্ক্যান করা হচ্ছে..."):
         scanned_list = []
         for stock in stocks_in_sector:
             df = fetch_stock_data(stock)
@@ -204,7 +203,7 @@ if results:
     st.dataframe(res_df[["Stock Symbol", "Price (₹)", "20 EMA (₹)", "Signal Status"]], use_container_width=True)
     available_stocks = res_df["Full Ticker"].tolist()
 else:
-    st.warning("⚠️ বর্তমানে এই সেক্টরে কোনো সেটআপ পাওয়া যায়নি। নিচে থেকে যেকোনো স্টক চার্ট দেখার জন্য সিলেক্ট করুন।")
+    st.warning("⚠️ বর্তমানে এই সেক্টরে কোনো বিশেষ প্যাটার্ন পাওয়া যায়নি। নিচে থেকে যেকোনো স্টক অরিজিনাল চার্ট দেখার জন্য সিলেক্ট করুন।")
     available_stocks = stocks_in_sector
 
 st.markdown("---")
@@ -221,7 +220,9 @@ if selected_stock:
     
     df = fetch_stock_data(selected_stock)
 
-    if not df.empty:
+    if df.empty:
+        st.error(f"❌ {raw_name} এর অরিজিনাল লাইভ ডাটা লোড করা সম্ভব হয়নি। কিছুক্ষণ পর পেজটি রিফ্রেশ দিন।")
+    else:
         # Technical Calculation
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['Vol_Avg'] = df['Volume'].rolling(20).mean()
@@ -318,7 +319,7 @@ if selected_stock:
 
         strategy_title = "২০ ইএমএ বাউন্স ও ভলিউম ব্রেকআউট স্ট্র্যাটেজি" if volume_spike else "২০ ইএমএ ডাইনামিক সাপোর্ট রিভার্সাল স্ট্র্যাটেজি"
 
-        # Voice Text (Clean Speech Text for JS Audio Player)
+        # Speech Text for Audio Button
         speech_text = f"{raw_name} স্টকের টেকনিক্যাল এবং বায়ার অ্যাক্টিভিটি বিশ্লেষণ। " \
                       f"এখানে {strategy_title} কাজ করছে। " \
                       f"স্টকের বর্তমান বাই এন্ট্রি প্রাইস {entry_level} টাকা। প্রফিট টার্গেট {target_level} টাকা এবং স্টপ লস {sl_level} টাকা। " \
@@ -329,7 +330,7 @@ if selected_stock:
 
         st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
 
-        # HTML + JS SpeechSynthesis Web Component (Audio Readout Button)
+        # HTML + JS Text-To-Speech Button
         tts_component = f"""
         <div style="margin-bottom: 20px;">
             <button onclick="playVoice()" style="
@@ -363,7 +364,7 @@ if selected_stock:
         """
         components.html(tts_component, height=75)
 
-        # Clear Detailed Text Breakdown on Screen
+        # Clear Text Explanation on Screen
         st.info(f"""
         ### 🎯 ১. কোন্ স্ট্র্যাটেজি কাজ করছে:
         এখানে **'{strategy_title}'** ব্যবহার করা হয়েছে। স্টকটি তার ২০ দিনের ডায়নামিক ইএমএ লাইন (₹{ema_20})-এর ওপর এসে শক্ত ভিত্তি বা সাপোর্ট তৈরি করে ওপরে উঠতে শুরু করেছে।
@@ -390,4 +391,3 @@ if selected_stock:
         2. **Buy** প্রেস করে লিমিট প্রাইস সেট করুন **₹{entry_level}**।
         3. অর্ডার এগজিকিউট হলে **Stop Loss Trigger Price** দিন **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
         """)
-        
