@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 # Page Configuration
 st.set_page_config(page_title="Smart Trade Pattern & Chart Analyzer", layout="wide")
 
-st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার (Real Live Data)")
+st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার")
 st.caption("অরিজিনাল লাইভ ডাটা, TradingView চার্ট, বায়ার অ্যাক্টিভিটি অ্যানালাইসিস এবং ভয়েস রিডআউট")
 
 # ---------------------------------------------------------
@@ -91,59 +91,61 @@ SECTOR_STOCKS = {
 }
 
 # ---------------------------------------------------------
-# REAL LIVE DATA FETCHER (NO FAKE/SYNTHETIC FALLBACK)
+# ROBUST LIVE DATA FETCHER (BYPASSING CLOUD BLOCKS)
 # ---------------------------------------------------------
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def fetch_stock_data(ticker_symbol):
-    # Method 1: yfinance Ticker Direct
-    try:
-        tk = yf.Ticker(ticker_symbol)
-        df = tk.history(period="6m", interval="1d")
-        if df is not None and not df.empty and len(df) >= 5:
-            df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
-            return df
-    except Exception:
-        pass
+    clean_symbol = ticker_symbol.strip().upper()
+    
+    # Custom Browser Headers to prevent blocking
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': f'https://finance.yahoo.com/quote/{clean_symbol}'
+    }
 
-    # Method 2: yfinance download
+    # Direct Yahoo Chart API (Primary Fast Source)
+    for domain in ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]:
+        try:
+            url = f"https://{domain}/v8/finance/chart/{clean_symbol}?range=6m&interval=1d"
+            res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                if 'chart' in data and data['chart']['result']:
+                    result = data['chart']['result'][0]
+                    timestamps = result.get('timestamp', [])
+                    quote = result['indicators']['quote'][0]
+                    
+                    df = pd.DataFrame({
+                        'Open': quote.get('open'),
+                        'High': quote.get('high'),
+                        'Low': quote.get('low'),
+                        'Close': quote.get('close'),
+                        'Volume': quote.get('volume')
+                    }, index=pd.to_datetime(timestamps, unit='s'))
+                    
+                    df.dropna(subset=['Close'], inplace=True)
+                    df.bfill(inplace=True)
+                    df.ffill(inplace=True)
+                    
+                    if not df.empty and len(df) >= 5:
+                        return df
+        except Exception:
+            continue
+
+    # Secondary Source: yfinance download
     try:
-        df = yf.download(ticker_symbol, period="6m", interval="1d", progress=False, auto_adjust=True)
+        df = yf.download(clean_symbol, period="6m", interval="1d", progress=False, auto_adjust=True)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        if df is not None and not df.empty and len(df) >= 5:
+        if df is not None and not df.empty:
             df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
-            return df
-    except Exception:
-        pass
-
-    # Method 3: Direct Yahoo Finance Query API with Headers
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-        }
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?range=6m&interval=1d"
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            result = data['chart']['result'][0]
-            timestamps = result['timestamp']
-            quote = result['indicators']['quote'][0]
-            
-            df = pd.DataFrame({
-                'Open': quote['open'],
-                'High': quote['high'],
-                'Low': quote['low'],
-                'Close': quote['close'],
-                'Volume': quote['volume']
-            }, index=pd.to_datetime(timestamps, unit='s'))
-            
-            df.dropna(inplace=True)
-            if not df.empty and len(df) >= 5:
+            if len(df) >= 5:
                 return df
     except Exception:
         pass
 
-    # Return Empty DataFrame if Live Data Fails (Strictly NO FAKE DATA)
     return pd.DataFrame()
 
 # ---------------------------------------------------------
@@ -162,7 +164,7 @@ stocks_in_sector = SECTOR_STOCKS[selected_sector]
 if scan_btn or "scanned_results" not in st.session_state:
     st.session_state["scanned_results"] = []
     
-    with st.spinner(f"'{selected_sector}' এর অরিজিনাল ডাটা স্ক্যান করা হচ্ছে..."):
+    with st.spinner(f"'{selected_sector}' এর লাইভ ডাটা স্ক্যান করা হচ্ছে..."):
         scanned_list = []
         for stock in stocks_in_sector:
             df = fetch_stock_data(stock)
@@ -203,7 +205,7 @@ if results:
     st.dataframe(res_df[["Stock Symbol", "Price (₹)", "20 EMA (₹)", "Signal Status"]], use_container_width=True)
     available_stocks = res_df["Full Ticker"].tolist()
 else:
-    st.warning("⚠️ বর্তমানে এই সেক্টরে কোনো বিশেষ প্যাটার্ন পাওয়া যায়নি। নিচে থেকে যেকোনো স্টক অরিজিনাল চার্ট দেখার জন্য সিলেক্ট করুন।")
+    st.info("ℹ️ এই মূহুর্তে বিশেষ কোনো সাপোর্ট প্যাটার্ন নেই। কিন্তু আপনি নিচে থেকে যেকোনো স্টক সিলেক্ট করে অরিজিনাল লাইভ চার্ট দেখতে পারেন।")
     available_stocks = stocks_in_sector
 
 st.markdown("---")
@@ -216,12 +218,12 @@ selected_stock = st.selectbox("🎯 বিস্তারিত চার্ট 
 if selected_stock:
     raw_name = selected_stock.replace(".NS", "").replace(".BO", "")
     
-    st.subheader(f"📌 {raw_name} - TradingView Style Real Candlestick Chart")
+    st.subheader(f"📌 {raw_name} - Real Candlestick Chart")
     
     df = fetch_stock_data(selected_stock)
 
     if df.empty:
-        st.error(f"❌ {raw_name} এর অরিজিনাল লাইভ ডাটা লোড করা সম্ভব হয়নি। কিছুক্ষণ পর পেজটি রিফ্রেশ দিন।")
+        st.warning(f"⚠️ {raw_name} এর লাইভ ডাটা কানেক্ট হচ্ছে... অনুগ্রহ করে ওপরের '🚀 এই সাব-সেক্টর স্ক্যান করুন' বাটনে চাপ দিন।")
     else:
         # Technical Calculation
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
@@ -234,9 +236,6 @@ if selected_stock:
         entry_level = latest_price
         target_level = round(entry_level * 1.07, 2)    # +7% Target
         sl_level = round(entry_level * 0.975, 2)       # -2.5% Stop Loss
-        
-        recent_df = df.tail(60) if len(df) >= 60 else df
-        breakout_res_level = round(float(recent_df['High'].max()), 2)
         
         # Top Metrics Cards
         c1, c2, c3, c4 = st.columns(4)
@@ -277,10 +276,10 @@ if selected_stock:
         fig.add_hline(y=sl_level, line_dash="dash", line_color="#ef5350", line_width=1.5,
                       annotation_text=f"🔴 Stop Loss (2.5%): ₹{sl_level}", annotation_position="bottom left", row=1, col=1)
 
-        # 4. TradingView Style Pointer Arrow Annotation
+        # 4. Pointer Arrow Annotation
         fig.add_annotation(
             x=df.index[-1], y=latest_price,
-            text="🎯 BUY BREAKOUT & EMA BOUNCE<br>(High Volume Support)",
+            text="🎯 BUY BREAKOUT & EMA BOUNCE",
             showarrow=True, arrowhead=2, arrowsize=1.2, arrowwidth=2, arrowcolor="#089981",
             ax=-90, ay=-60,
             bordercolor="#089981", borderwidth=1.5, borderpad=6,
@@ -289,7 +288,7 @@ if selected_stock:
             row=1, col=1
         )
 
-        # Bottom Chart: Volume Bar Chart (TradingView Theme)
+        # Bottom Chart: Volume Bar Chart
         vol_colors = ['#089981' if c >= o else '#f23645' for c, o in zip(df['Close'], df['Open'])]
         fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='Volume', marker_color=vol_colors), row=2, col=1)
 
@@ -391,3 +390,4 @@ if selected_stock:
         2. **Buy** প্রেস করে লিমিট প্রাইস সেট করুন **₹{entry_level}**।
         3. অর্ডার এগজিকিউট হলে **Stop Loss Trigger Price** দিন **₹{sl_level}** এবং **Target** দিন **₹{target_level}**।
         """)
+        
