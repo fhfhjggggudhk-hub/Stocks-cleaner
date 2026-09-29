@@ -7,6 +7,14 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
+# TradingView Library Import
+try:
+    from tvDatafeed import Interval, TvDatafeed
+
+    HAS_TV = True
+except Exception:
+    HAS_TV = False
+
 # Safe Import for YFinance
 try:
     import yfinance as yf
@@ -14,14 +22,6 @@ try:
     HAS_YFINANCE = True
 except ImportError:
     HAS_YFINANCE = False
-
-# Safe Import for TradingView Datafeed
-try:
-    from tvDatafeed import Interval, TvDatafeed
-
-    HAS_TV = True
-except Exception:
-    HAS_TV = False
 
 # Page Configuration
 st.set_page_config(
@@ -31,19 +31,18 @@ st.set_page_config(
 )
 
 st.title("🎯 স্মার্ট মানি ও ইনস্টিটিউশনাল অ্যাকুমুলেশন অ্যানালাইজার")
-st.caption(
-    "Multi-Source Realtime Engine (TradingView, Yahoo API & Google Finance Sync)"
-)
+st.caption("Powered by TradingView Realtime Chart Engine (NSE India)")
 
 
 # ---------------------------------------------------------
-# MULTI-SOURCE DIRECT NSE ENGINE
+# TRADINGVIEW DIRECT DATA ENGINE (PRIMARY)
 # ---------------------------------------------------------
 @st.cache_resource
 def get_tv_engine():
     if not HAS_TV:
         return None
     try:
+        # Connect to TradingView anonymously
         return TvDatafeed()
     except Exception:
         return None
@@ -59,16 +58,19 @@ def fetch_real_stock_data(symbol_str):
     )
     df = None
 
-    # Source 1: Primary TradingView Data Feed
+    # =========================================================
+    # SOURCE 1: DIRECT TRADINGVIEW DATA (PRIMARY PRIORITY)
+    # =========================================================
     if HAS_TV:
         try:
             tv = get_tv_engine()
             if tv is not None:
+                # Fetch exact daily candles from TradingView NSE
                 tv_df = tv.get_hist(
                     symbol=clean_ticker,
                     exchange="NSE",
                     interval=Interval.in_daily,
-                    n_bars=120,
+                    n_bars=150,
                 )
                 if tv_df is not None and not tv_df.empty:
                     df = tv_df.copy()
@@ -86,60 +88,38 @@ def fetch_real_stock_data(symbol_str):
         except Exception:
             df = None
 
-    # Source 2: Direct Yahoo API Fallback
+    # =========================================================
+    # SOURCE 2: BACKUP (ONLY IF TRADINGVIEW TEMPORARILY BLOCKS)
+    # =========================================================
     if df is None or df.empty:
-        yf_symbol = f"{clean_ticker}.NS"
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                " (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            )
-        }
-        try:
-            url = f"https://query2.finance.yahoo.com/v8/finance/chart/{yf_symbol}?range=6m&interval=1d"
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                json_data = res.json()
-                if json_data.get("chart", {}).get("result"):
-                    chart_res = json_data["chart"]["result"][0]
-                    timestamps = chart_res.get("timestamp", [])
-                    quote = chart_res["indicators"]["quote"][0]
+        suffixes = [".NS", ".BO"]
+        for suffix in suffixes:
+            full_symbol = f"{clean_ticker}{suffix}"
+            if HAS_YFINANCE:
+                try:
+                    t_obj = yf.Ticker(full_symbol)
+                    temp_df = t_obj.history(period="6m")
+                    if (
+                        temp_df is not None
+                        and not temp_df.empty
+                        and len(temp_df) >= 10
+                    ):
+                        df = temp_df[
+                            ["Open", "High", "Low", "Close", "Volume"]
+                        ].copy()
+                        break
+                except Exception:
+                    pass
 
-                    temp_df = pd.DataFrame(
-                        {
-                            "Open": quote.get("open"),
-                            "High": quote.get("high"),
-                            "Low": quote.get("low"),
-                            "Close": quote.get("close"),
-                            "Volume": quote.get("volume"),
-                        },
-                        index=pd.to_datetime(timestamps, unit="s"),
-                    )
-                    temp_df.dropna(subset=["Close"], inplace=True)
-                    if len(temp_df) >= 10:
-                        df = temp_df
-        except Exception:
-            pass
-
-    # Source 3: Standard YFinance Download
-    if (df is None or df.empty) and HAS_YFINANCE:
-        try:
-            yf_symbol = f"{clean_ticker}.NS"
-            temp_df = yf.download(
-                yf_symbol, period="6m", interval="1d", progress=False
-            )
-            if temp_df is not None and not temp_df.empty:
-                if isinstance(temp_df.columns, pd.MultiIndex):
-                    temp_df.columns = temp_df.columns.get_level_values(0)
-                df = temp_df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-        except Exception:
-            pass
-
-    # Source 4: Live Google Finance Sync
+    # Live Google Price Verification
     if df is not None and not df.empty:
         try:
             g_url = f"https://www.google.com/finance/quote/{clean_ticker}:NSE"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0"
+                )
+            }
             g_res = requests.get(g_url, headers=headers, timeout=3)
             if g_res.status_code == 200:
                 match = re.search(r'data-last-price="([\d\.]+)"', g_res.text)
@@ -172,13 +152,13 @@ analyze_btn = st.sidebar.button(
 )
 
 if stock_input:
-    with st.spinner("লাইভ মার্কেট ডেটা আনা হচ্ছে..."):
+    with st.spinner("TradingView থেকে আসল ক্যান্ডেল ও প্রাইস ডেটা আনা হচ্ছে..."):
         df, clean_ticker = fetch_real_stock_data(stock_input)
 
     if df is None or df.empty:
         st.error(
-            f"❌ **'{stock_input}'** স্টকের ডেটা পাওয়া যায়নি। স্টকের টিকার নাম"
-            " সঠিক আছে কিনা চেক করুন।"
+            f"❌ **'{stock_input}'** স্টকের ডেটা ট্রেডিংভিউতে পাওয়া যায়নি। স্টকের"
+            " সঠিক টিকার নাম চেক করুন।"
         )
     else:
         # Technical Indicator Calculations
@@ -364,7 +344,7 @@ if stock_input:
             shared_xaxes=True,
             vertical_spacing=0.03,
             subplot_titles=(
-                f"Real Daily Chart ({clean_ticker})",
+                f"TradingView Real Chart ({clean_ticker})",
                 "Volume Breakdown",
             ),
             row_width=[0.22, 0.78],
@@ -490,4 +470,4 @@ if stock_input:
             st.markdown(
                 f"### ⚠️ যে ফিল্টারগুলো দুর্বল:\n<ul>{fail_html}</ul>",
                 unsafe_allow_html=True,
-)
+        )
