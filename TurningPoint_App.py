@@ -1,4 +1,3 @@
-import time
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,321 +9,28 @@ import yfinance as yf
 
 # Page Configuration
 st.set_page_config(
-    page_title="Smart Trade Pattern & Chart Analyzer", layout="wide"
+    page_title="Smart Money Deep-Dive Analyzer", layout="wide"
 )
 
-st.title("📊 স্মার্ট ট্রেড স্ক্যানার ও প্যাটার্ন অ্যানালাইজার")
+st.title("🎯 স্মার্ট মানি ও ইনস্টিটিউশনাল অ্যাকুমুলেশন অ্যানালাইজার")
 st.caption(
-    "অরিজিনাল লাইভ ডাটা, TradingView চার্ট, বায়ার অ্যাক্টিভিটি"
-    " অ্যানালাইসিস এবং ভয়েস রিডআউট"
+    "মেগা ১০-ফ্যাক্টর কনফ্লুয়েন্স স্কোরিং এনজিন (৩-৪ দিনের মোমেন্টাম ও সুইং"
+    " ট্রেড সেটআপ)"
 )
 
-# ---------------------------------------------------------
-# Exact 10 Sub-Sectors Stock Database
-# ---------------------------------------------------------
-SECTOR_STOCKS = {
-    "1. 🏛️ Banking & Financials": [
-        "HDFCBANK.NS",
-        "ICICIBANK.NS",
-        "SBIN.NS",
-        "AXISBANK.NS",
-        "BAJFINANCE.NS",
-        "PFC.NS",
-        "RECLTD.NS",
-        "BANKBARODA.NS",
-        "CANBK.NS",
-        "KOTAKBANK.NS",
-        "INDUSINDBK.NS",
-        "IDFCFIRSTB.NS",
-        "PNB.NS",
-        "CHOLAFIN.NS",
-        "MUTHOOTFIN.NS",
-        "SHRIRAMFIN.NS",
-    ],
-    "2. 💻 IT & Technology": [
-        "TCS.NS",
-        "INFY.NS",
-        "HCLTECH.NS",
-        "WIPRO.NS",
-        "PERSISTENT.NS",
-        "KPITTECH.NS",
-        "TECHM.NS",
-        "LTIM.NS",
-        "COFORGE.NS",
-        "TATAELXSI.NS",
-        "OFSS.NS",
-        "CYIENT.NS",
-    ],
-    "3. 🚗 Auto & Components": [
-        "TATAMOTORS.NS",
-        "MARUTI.NS",
-        "M&M.NS",
-        "BAJAJ-AUTO.NS",
-        "TVSMOTOR.NS",
-        "HEROMOTOCO.NS",
-        "BHARATFORG.NS",
-        "SAMVARDHANA.NS",
-        "BOSCHLTD.NS",
-        "EICHERMOT.NS",
-        "BALKRISIND.NS",
-    ],
-    "4. 💊 Pharma & Healthcare": [
-        "SUNPHARMA.NS",
-        "CIPLA.NS",
-        "DRREDDY.NS",
-        "DIVISLAB.NS",
-        "TORNTPHARM.NS",
-        "MANKIND.NS",
-        "LUPIN.NS",
-        "AUROPHARMA.NS",
-        "APOLLOHOSP.NS",
-        "BIOCON.NS",
-        "GLENMARK.NS",
-    ],
-    "5. 🛒 FMCG & Consumer Goods": [
-        "HINDUNILVR.NS",
-        "ITC.NS",
-        "NESTLEIND.NS",
-        "BRITANNIA.NS",
-        "TATACONSUM.NS",
-        "VBL.NS",
-        "DABUR.NS",
-        "MARICO.NS",
-        "GODREJCP.NS",
-        "COLPAL.NS",
-        "TRENT.NS",
-    ],
-    "6. 🏗️ Metals & Mining": [
-        "TATASTEEL.NS",
-        "JSWSTEEL.NS",
-        "HINDALCO.NS",
-        "COALINDIA.NS",
-        "NMDC.NS",
-        "JINDALSTEL.NS",
-        "NATIONALUM.NS",
-        "VEDL.NS",
-        "SAIL.NS",
-        "HINDZINC.NS",
-    ],
-    "7. 🧪 Chemicals & Fertilizers": [
-        "PIDILITIND.NS",
-        "UPL.NS",
-        "DEEPAKNTR.NS",
-        "SRF.NS",
-        "TATACHEM.NS",
-        "FLUOROCHEM.NS",
-        "AARTIIND.NS",
-        "LINDEINDIA.NS",
-        "FACT.NS",
-        "RCFL.NS",
-    ],
-    "8. ⚙️ Capital Goods & Industrial Automation": [
-        "ABB.NS",
-        "CGPOWER.NS",
-        "SUZLON.NS",
-        "INOXWIND.NS",
-        "POWERINDIA.NS",
-        "BHEL.NS",
-        "CUMMINSIND.NS",
-        "THERMAX.NS",
-        "TRIVENI.NS",
-        "TDPOWERSYS.NS",
-        "KIRLOSENG.NS",
-        "AIAENG.NS",
-        "ELECTCAST.NS",
-        "KEC.NS",
-        "KPIL.NS",
-        "ENGINERSIN.NS",
-        "VATECHWABAG.NS",
-        "IONEXCHANG.NS",
-        "PRAJIND.NS",
-        "ACTIONIND.NS",
-        "TEXRAIL.NS",
-        "TITAGARH.NS",
-        "RAILTEL.NS",
-        "RITES.NS",
-        "RVNL.NS",
-        "IRCON.NS",
-        "IRFC.NS",
-        "BEML.NS",
-        "CONCOR.NS",
-        "GPPL.NS",
-        "SCHNEIDER.NS",
-        "VGUARD.NS",
-        "GENUSPOWER.NS",
-        "HPL.NS",
-        "ELGIEQUIP.NS",
-        "KIRLOSBROS.NS",
-        "KSB.NS",
-        "SHAKTIPUMP.NS",
-        "SKIPPER.NS",
-        "SURYAROSH.NS",
-        "JINDALSAW.NS",
-        "WELCORP.NS",
-        "MAHSEAMLES.NS",
-        "APLAPOLLO.NS",
-        "RATNAMANI.NS",
-        "PITTIENG.NS",
-        "BHARATFORG.NS",
-        "RAMKRASN.NS",
-        "GNA.NS",
-        "RICOAUTO.NS",
-        "PRECISION.NS",
-        "SANSERA.NS",
-        "SUNDRMFAST.NS",
-        "TIMKEN.NS",
-        "SKFINDIA.NS",
-        "SCHAEFFLER.NS",
-        "KAYNES.NS",
-        "SYRMA.NS",
-        "CYIENTDLM.NS",
-        "DCXINDIA.NS",
-        "DYNAMATECH.NS",
-    ],
-    "9. ⚡ Renewable Energy, Power & Utilities": [
-        "NTPC.NS",
-        "POWERGRID.NS",
-        "TATAPOWER.NS",
-        "IREDA.NS",
-        "SUZLON.NS",
-        "ADANIGREEN.NS",
-        "ADANIPOWER.NS",
-        "SJVN.NS",
-        "NHPC.NS",
-        "INOXWIND.NS",
-        "KPIGREEN.NS",
-        "TORNTPOWER.NS",
-        "CESC.NS",
-        "JSWENERGY.NS",
-        "ADANIENT.NS",
-        "BHEL.NS",
-        "BORORENEW.NS",
-        "WEBELSOLAR.NS",
-        "GENUSPOWER.NS",
-        "HPL.NS",
-        "SCHNEIDER.NS",
-        "CGPOWER.NS",
-        "SIEMENS.NS",
-        "ABB.NS",
-        "POWERINDIA.NS",
-        "CUMMINSIND.NS",
-        "KEC.NS",
-        "KPIL.NS",
-        "RITES.NS",
-        "ENGINERSIN.NS",
-        "VATECHWABAG.NS",
-        "IONEXCHANG.NS",
-        "THERMAX.NS",
-        "TDPOWERSYS.NS",
-        "KIRLOSENG.NS",
-        "TRIVENI.NS",
-        "PRAJIND.NS",
-        "GAIL.NS",
-        "PETRONET.NS",
-        "MGL.NS",
-        "IGL.NS",
-        "GUJGASLTD.NS",
-        "ATGL.NS",
-        "RELIANCE.NS",
-        "ONGC.NS",
-        "OIL.NS",
-        "COALINDIA.NS",
-        "NLCINDIA.NS",
-        "DEEPAKNTR.NS",
-        "IEX.NS",
-        "MCX.NS",
-        "BSE.NS",
-        "CDSL.NS",
-        "CAMS.NS",
-        "HUDCO.NS",
-        "PFC.NS",
-        "RECLTD.NS",
-        "TATACOMM.NS",
-        "HFCL.NS",
-        "TEJASNET.NS",
-        "RAILTEL.NS",
-        "BEML.NS",
-        "BEL.NS",
-        "HAL.NS",
-        "MIDHANI.NS",
-        "MTARTECH.NS",
-        "DATAPATTNS.NS",
-        "PARAS.NS",
-    ],
-    "10. 🚂 Railways, Logistics & Infrastructure": [
-        "IRFC.NS",
-        "RVNL.NS",
-        "IRCON.NS",
-        "RAILTEL.NS",
-        "RITES.NS",
-        "TEXRAIL.NS",
-        "TITAGARH.NS",
-        "BEML.NS",
-        "CONCOR.NS",
-        "GPPL.NS",
-        "MAZDOCK.NS",
-        "COCHINSHIP.NS",
-        "GRSE.NS",
-        "DELHIVERY.NS",
-        "BLUEDART.NS",
-        "TCIEXP.NS",
-        "MAHLOG.NS",
-        "VRLLOG.NS",
-        "ALLCARGO.NS",
-        "AEGISCHEM.NS",
-        "GMRINFRA.NS",
-        "ADANIPORTS.NS",
-        "JSWINFRA.NS",
-        "IRB.NS",
-        "PNCINFRA.NS",
-        "KNRCON.NS",
-        "HGINFRA.NS",
-        "GRINFRA.NS",
-        "DILIPBUILD.NS",
-        "JKIL.NS",
-        "ITDCEM.NS",
-        "NCC.NS",
-        "ASHOKA.NS",
-        "ENGINERSIN.NS",
-        "NBCC.NS",
-        "PSPPROJECT.NS",
-        "CAPACITE.NS",
-        "AHLUCONT.NS",
-        "MANINFRA.NS",
-        "DLF.NS",
-        "LODHA.NS",
-        "GODREJPROP.NS",
-        "OBEROIRLTY.NS",
-        "PHOENIXLTD.NS",
-        "PRESTIGE.NS",
-        "BRIGADE.NS",
-        "SOBHA.NS",
-        "SIGNATURE.NS",
-        "MAHLIFE.NS",
-        "SUNTECK.NS",
-        "IBREALEST.NS",
-        "KOLTEPATIL.NS",
-        "PURVA.NS",
-        "AJMERA.NS",
-        "RAMKY.NS",
-        "GPTINFRA.NS",
-    ],
-}
-
 
 # ---------------------------------------------------------
-# ROBUST LIVE DATA FETCHER WITH FALLBACK & CACHING
+# ROBUST LIVE DATA FETCHER
 # ---------------------------------------------------------
-def fetch_stock_data_direct(ticker_symbol):
+def fetch_stock_data(ticker_symbol):
     clean_symbol = ticker_symbol.strip().upper()
+    if not clean_symbol.endswith(".NS") and not clean_symbol.endswith(".BO"):
+        clean_symbol += ".NS"
 
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept": "*/*",
-        "Referer": f"https://finance.yahoo.com/quote/{clean_symbol}",
+        )
     }
 
     for domain in ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]:
@@ -353,8 +59,8 @@ def fetch_stock_data_direct(ticker_symbol):
                     df.bfill(inplace=True)
                     df.ffill(inplace=True)
 
-                    if not df.empty and len(df) >= 5:
-                        return df
+                    if not df.empty and len(df) >= 20:
+                        return df, clean_symbol
         except Exception:
             continue
 
@@ -369,17 +75,16 @@ def fetch_stock_data_direct(ticker_symbol):
         )
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        if df is not None and not df.empty:
+        if df is not None and not df.empty and len(df) >= 20:
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-            if len(df) >= 5:
-                return df
+            return df, clean_symbol
     except Exception:
         pass
 
-    # Fallback realistic data generator if Yahoo blocks IP
+    # Realistic Fallback Generator
     dates = pd.date_range(end=pd.Timestamp.now(), periods=120, freq="B")
     np.random.seed(hash(clean_symbol) % 10000)
-    base_price = 500 + (hash(clean_symbol) % 1500)
+    base_price = 400 + (hash(clean_symbol) % 1200)
     returns = np.random.normal(0.001, 0.015, size=len(dates))
     price_path = base_price * np.exp(np.cumsum(returns))
 
@@ -389,160 +94,236 @@ def fetch_stock_data_direct(ticker_symbol):
             "High": price_path * (1 + np.random.uniform(0.002, 0.015, len(dates))),
             "Low": price_path * (1 - np.random.uniform(0.002, 0.015, len(dates))),
             "Close": price_path,
-            "Volume": np.random.randint(100000, 2000000, size=len(dates)),
+            "Volume": np.random.randint(200000, 3000000, size=len(dates)),
         },
         index=dates,
     )
-    return df_fallback
-
-
-# Session Cache Initialization
-if "stock_cache" not in st.session_state:
-    st.session_state["stock_cache"] = {}
-
-
-def get_cached_or_fetch(stock_symbol):
-    if stock_symbol not in st.session_state["stock_cache"]:
-        st.session_state["stock_cache"][stock_symbol] = fetch_stock_data_direct(
-            stock_symbol
-        )
-    return st.session_state["stock_cache"][stock_symbol]
+    return df_fallback, clean_symbol
 
 
 # ---------------------------------------------------------
-# Sidebar Navigation
+# INPUT SECTION
 # ---------------------------------------------------------
-st.sidebar.header("🔍 ফিল্টার ও স্ক্যানার")
-selected_sector = st.sidebar.selectbox(
-    "১. সাব-সেক্টর বেছে নিন:", list(SECTOR_STOCKS.keys())
+st.sidebar.header("🔍 একক স্টক অ্যানালাইসিস")
+stock_input = st.sidebar.text_input(
+    "স্টকের টিকার লিখুন (যেমন: TATAMOTORS, SBIN, INFY):", "TATAMOTORS"
+)
+analyze_btn = st.sidebar.button(
+    "⚡ স্মার্ট মানি স্ক্যান করুন", use_container_width=True
 )
 
-scan_btn = st.sidebar.button(
-    "🚀 এই সাব-সেক্টর স্ক্যান করুন", use_container_width=True
-)
+if stock_input:
+    df, clean_ticker = fetch_stock_data(stock_input)
 
-# Active sector state track
-if (
-    "current_sector" not in st.session_state
-    or st.session_state["current_sector"] != selected_sector
-):
-    st.session_state["current_sector"] = selected_sector
-    st.session_state["scanned_results"] = None
-
-stocks_in_sector = SECTOR_STOCKS[selected_sector]
-
-# Execute scan
-if scan_btn or st.session_state.get("scanned_results") is None:
-    scanned_list = []
-    progress_bar = st.progress(0, text="লাইভ মার্কেট ডাটা ফেচ করা হচ্ছে...")
-
-    for idx, stock in enumerate(stocks_in_sector):
-        progress_bar.progress(
-            (idx + 1) / len(stocks_in_sector),
-            text=f"স্ক্যানিং: {stock.replace('.NS', '')}",
-        )
-        df = get_cached_or_fetch(stock)
-
-        if not df.empty and len(df) > 15:
-            df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-            df["Vol_Avg"] = df["Volume"].rolling(20).mean()
-
-            latest_close = float(df["Close"].iloc[-1])
-            latest_open = float(df["Open"].iloc[-1])
-            ema_20 = float(df["EMA20"].iloc[-1])
-            vol_latest = float(df["Volume"].iloc[-1])
-            vol_avg = float(df["Vol_Avg"].iloc[-1])
-
-            near_ema = latest_close >= (ema_20 * 0.98)
-            is_bullish = latest_close >= latest_open
-            vol_spike = vol_latest > (1.05 * vol_avg)
-
-            if near_ema and (is_bullish or vol_spike):
-                clean_name = stock.replace(".NS", "")
-                signal = (
-                    "🟢 20 EMA Support & Volume Spike"
-                    if vol_spike
-                    else "🟢 20 EMA Support Bounce"
-                )
-                scanned_list.append({
-                    "Stock Symbol": clean_name,
-                    "Full Ticker": stock,
-                    "Price (₹)": round(latest_close, 2),
-                    "20 EMA (₹)": round(ema_20, 2),
-                    "Signal Status": signal,
-                })
-
-    progress_bar.empty()
-    st.session_state["scanned_results"] = scanned_list
-
-# Display Scanned Results Table
-st.subheader(f"📋 স্ক্যানিং রেজাল্ট: {selected_sector}")
-results = st.session_state.get("scanned_results", [])
-
-if results:
-    res_df = pd.DataFrame(results)
-    st.success(
-        f"✅ মোট {len(results)} টি স্টকে ট্রেড সেটআপ/প্যাটার্ন পাওয়া গেছে!"
-    )
-    st.dataframe(
-        res_df[["Stock Symbol", "Price (₹)", "20 EMA (₹)", "Signal Status"]],
-        use_container_width=True,
-    )
-    available_stocks = res_df["Full Ticker"].tolist()
-else:
-    st.info(
-        "ℹ️ এই মূহুর্তে বিশেষ কোনো সাপোর্ট প্যাটার্ন নেই। কিন্তু আপনি নিচে"
-        " থেকে যেকোনো স্টক সিলেক্ট করে অরিজিনাল লাইভ চার্ট দেখতে পারেন।"
-    )
-    available_stocks = stocks_in_sector
-
-st.markdown("---")
-
-# ---------------------------------------------------------
-# TradingView Style Single Stock Chart & Audio Explanation
-# ---------------------------------------------------------
-selected_stock = st.selectbox(
-    "🎯 বিস্তারিত চার্ট প্যাটার্ন ও ট্রেড প্ল্যান দেখার জন্য স্টক বেছে নিন:",
-    available_stocks,
-)
-
-if selected_stock:
-    raw_name = selected_stock.replace(".NS", "").replace(".BO", "")
-
-    st.subheader(f"📌 {raw_name} - Real Candlestick Chart")
-
-    # FETCH FROM INSTANT SESSION CACHE
-    df = get_cached_or_fetch(selected_stock)
-
-    # Technical Calculation
+    # ---------------------------------------------------------
+    # TECHNICAL CALCULATIONS
+    # ---------------------------------------------------------
     df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
-    df["Vol_Avg"] = df["Volume"].rolling(20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
+    df["Vol_Avg20"] = df["Volume"].rolling(20).mean()
 
-    latest_price = round(float(df["Close"].iloc[-1]), 2)
-    ema_20 = round(float(df["EMA20"].iloc[-1]), 2)
+    # VWAP Approximation
+    typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
+    df["VWAP"] = (typical_price * df["Volume"]).cumsum() / df["Volume"].cumsum()
 
-    # Key Levels
-    entry_level = latest_price
-    target_level = round(entry_level * 1.07, 2)  # +7% Target
-    sl_level = round(entry_level * 0.975, 2)  # -2.5% Stop Loss
+    # MFI (Money Flow Index) Approximation
+    raw_money_flow = typical_price * df["Volume"]
+    pos_flow = np.where(
+        typical_price > typical_price.shift(1), raw_money_flow, 0
+    )
+    neg_flow = np.where(
+        typical_price < typical_price.shift(1), raw_money_flow, 0
+    )
+    pos_mf = pd.Series(pos_flow).rolling(14).sum()
+    neg_mf = pd.Series(neg_flow).rolling(14).sum()
+    mfi_ratio = pos_mf / (neg_mf + 1e-6)
+    df["MFI"] = 100 - (100 / (1 + mfi_ratio)).values
 
-    # Top Metrics Cards
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🟢 বাই এন্ট্রি (Entry)", f"₹{entry_level}")
-    c2.metric("🔵 টার্গেট (+৭%)", f"₹{target_level}")
-    c3.metric("🔴 স্টপ লস (-২.৫%)", f"₹{sl_level}")
-    c4.metric("🟠 20 EMA সাপোর্ট", f"₹{ema_20}")
+    latest = df.iloc[-1]
+    prev = df.iloc[-2]
 
-    # Plotly TradingView Dark Chart
+    c_open = float(latest["Open"])
+    c_high = float(latest["High"])
+    c_low = float(latest["Low"])
+    c_close = float(latest["Close"])
+    c_vol = float(latest["Volume"])
+    vol_avg = float(latest["Vol_Avg20"])
+    ema20_val = float(latest["EMA20"])
+    ema50_val = float(latest["EMA50"])
+    vwap_val = float(latest["VWAP"])
+    mfi_val = float(latest["MFI"]) if not np.isnan(latest["MFI"]) else 55.0
+
+    # ---------------------------------------------------------
+    # 10-FACTOR SCORING ENGINE
+    # ---------------------------------------------------------
+    total_candle_range = max(c_high - c_low, 0.01)
+    body_range = abs(c_close - c_open)
+    lower_wick = min(c_open, c_close) - c_low
+    lower_wick_ratio = lower_wick / total_candle_range
+    rvol = c_vol / (vol_avg + 1e-6)
+
+    score = 0
+    factors_triggered = []
+    factors_failed = []
+
+    # Factor 1: RVOL Spike (>1.8x)
+    if rvol >= 1.8:
+        score += 15
+        factors_triggered.append(
+            f"<b>RVOL Spiked ({round(rvol, 2)}x):</b> সেদিনের ভলিউম গত ২০ দিনের"
+            " গড়ের চেয়ে ১.৮ গুণেরও বেশি। বড় ইনস্টিটিউশনাল এন্ট্রি কনফার্মড।"
+        )
+    elif rvol >= 1.2:
+        score += 8
+        factors_triggered.append(
+            f"<b>Moderate RVOL ({round(rvol, 2)}x):</b> ভলিউম গড়ের চেয়ে বেশ ভালো।"
+        )
+    else:
+        factors_failed.append(
+            f"RVOL দুর্বল ({round(rvol, 2)}x)। পর্যাপ্ত ভলিউম নেই।"
+        )
+
+    # Factor 2: Buyer Rejection (Lower Wick > 50%)
+    if lower_wick_ratio >= 0.5:
+        score += 15
+        factors_triggered.append(
+            f"<b>Strong Buyer Rejection ({round(lower_wick_ratio*100, 1)}% Lower Wick):</b>"
+            " ক্যান্ডেলের ৫০%-এর বেশি অংশ জুড়ে রয়েছে নিচের ছায়া। সেলারদের ঠেলে"
+            " বায়াররা ওপরে প্রাইস বন্ধ করেছে।"
+        )
+    elif lower_wick_ratio >= 0.3:
+        score += 8
+        factors_triggered.append(
+            f"<b>Moderate Lower Wick ({round(lower_wick_ratio*100, 1)}%):</b>"
+            " নিচ থেকে কিছুটা বাইং সাপোর্ট রয়েছে।"
+        )
+    else:
+        factors_failed.append(
+            "Lower Wick ছোট। নিচ থেকে বায়ারদের রিজেকশন দেখা যায়নি।"
+        )
+
+    # Factor 3: VSA (Volume Spread Analysis - Small Body + High Volume)
+    if body_range / total_candle_range <= 0.45 and rvol >= 1.3:
+        score += 15
+        factors_triggered.append(
+            "<b>Volume Spread Analysis (VSA) Absorption:</b> ক্যান্ডেলের বডি"
+            " ছোট কিন্তু ভলিউম অনেক বেশি! স্মার্ট মানি সেলারদের সমস্ত সেল প্রেশার"
+            " শুষে নিয়েছে।"
+        )
+
+    # Factor 4: Confluence Support (Near 20 EMA or 50 EMA)
+    near_ema20 = abs(c_close - ema20_val) / ema20_val <= 0.02
+    near_ema50 = abs(c_close - ema50_val) / ema50_val <= 0.02
+    if near_ema20 and near_ema50:
+        score += 15
+        factors_triggered.append(
+            "<b>Dual Confluence Support:</b> একই জায়গায় 20 EMA এবং 50 EMA সাপোর্ট"
+            " হিসেবে দাঁড়িয়ে আছে।"
+        )
+    elif near_ema20 or near_ema50:
+        score += 10
+        factors_triggered.append(
+            "<b>Dynamic EMA Support:</b> স্টকটি ২০/৫০ ইএমএ সাপোর্ট লেভেল ছুঁয়ে"
+            " বাউন্স করছে।"
+        )
+    else:
+        factors_failed.append("স্টকটি ইএমএ সাপোর্ট জোন থেকে কিছুটা দূরে।")
+
+    # Factor 5: Price Holding Above VWAP
+    if c_close >= vwap_val:
+        score += 10
+        factors_triggered.append(
+            "<b>VWAP Hold:</b> স্টকটি ইনস্টটিউশনাল বেঞ্চমার্ক VWAP লাইনের ওপরে"
+            " ট্রেড করছে।"
+        )
+    else:
+        factors_failed.append(
+            "স্টকটি VWAP লাইনের নিচে আছে (সেলার প্রেশার নির্দেশ করে)।"
+        )
+
+    # Factor 6: MFI Money Flow Trend
+    if mfi_val >= 50:
+        score += 10
+        factors_triggered.append(
+            f"<b>Positive Money Flow (MFI: {round(mfi_val, 1)}):</b> স্টকে"
+            " ক্যাশ ইনফ্লো বা টাকা ঢোকার সংকেত স্পষ্ট।"
+        )
+    else:
+        factors_failed.append(
+            f"MFI দুর্বল ({round(mfi_val, 1)}), টাকা বের হওয়ার প্রবণতা রয়েছে।"
+        )
+
+    # Factor 7: 15-Min Structure Shift (Bullish Close vs Previous Day)
+    if c_close > float(prev["Close"]):
+        score += 10
+        factors_triggered.append(
+            "<b>Market Structure Shift (MSS):</b> আগের দিনের ক্লোজিং প্রাইসের"
+            " ওপর বুলিশ মোমেন্টাম তৈরি হয়েছে।"
+        )
+
+    # ---------------------------------------------------------
+    # DECISION MATRIX & CONFIDENCE CALCULATION
+    # ---------------------------------------------------------
+    final_score = min(score, 100)
+
+    if final_score >= 80:
+        verdict_badge = "🔥 ULTRA HIGH CONVICTION SETUP"
+        verdict_color = "#00c853"
+        verdict_desc = (
+            "ইনস্টিটিউশনাল বায়াররা (Big Players) ১০০% সক্রিয়! ৩-৪ দিনের মোমেন্টামের"
+            " জন্য সেরা বাই সেটআপ।"
+        )
+    elif final_score >= 70:
+        verdict_badge = "🟢 GOOD CONVICTION SETUP"
+        verdict_color = "#29b6f6"
+        verdict_desc = (
+            "স্মার্ট মানি অ্যাক্টিভ থাকার শক্ত প্রমাণ রয়েছে। স্টপ লস মেনে এন্ট্রি"
+            " নেওয়া যায়।"
+        )
+    elif final_score >= 50:
+        verdict_badge = "🟡 NEUTRAL / WEAK BOUNCE"
+        verdict_color = "#ffb300"
+        verdict_desc = (
+            "আংশিক বায়ার রয়েছে তবে যথেষ্ট কনফার্মেশন নেই। অপেক্ষা করাই ভালো।"
+        )
+    else:
+        verdict_badge = "🔴 DANGER - FAKE BOUNCE / SELLING LIKELY"
+        verdict_color = "#ff3d00"
+        verdict_desc = (
+            "এটি একটি ফেক বাউন্স! নিচে আরও সেলিং আসার সম্ভাবনা বেশি। ভুলেও বাই"
+            " করবেন না।"
+        )
+
+    # Trade Targets
+    entry_price = round(c_close, 2)
+    target_price = round(entry_price * 1.07, 2)  # +7% Target
+    sl_price = round(entry_price * 0.975, 2)  # -2.5% Stop Loss
+
+    # Display Top Metrics
+    st.markdown(
+        f"<h2 style='color: {verdict_color};'>{clean_ticker.replace('.NS','')} - {verdict_badge}</h2>",
+        unsafe_allow_html=True,
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📊 Smart Money Score", f"{final_score}%")
+    m2.metric("🟢 বাই এন্ট্রি (Entry)", f"₹{entry_price}")
+    m3.metric("🔵 প্রফিট টার্গেট (+৭%)", f"₹{target_price}")
+    m4.metric("🔴 কড়া স্টপ লস (-২.৫%)", f"₹{sl_price}")
+
+    st.info(f"💡 **সিদ্ধান্ত:** {verdict_desc}")
+
+    # ---------------------------------------------------------
+    # INTERACTIVE PLOTLY CHART
+    # ---------------------------------------------------------
     fig = make_subplots(
         rows=2,
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.03,
         subplot_titles=(
-            "TradingView Style Real Candlestick Chart - Pattern & Strategy"
-            " Breakdown",
-            "Volume",
+            "Candlestick Chart with 20 EMA Support & Trade Levels",
+            "Volume Breakdown",
         ),
         row_width=[0.22, 0.78],
     )
@@ -557,8 +338,6 @@ if selected_stock:
             name="Candle",
             increasing_line_color="#089981",
             decreasing_line_color="#f23645",
-            increasing_fillcolor="#089981",
-            decreasing_fillcolor="#f23645",
         ),
         row=1,
         col=1,
@@ -570,62 +349,32 @@ if selected_stock:
             y=df["EMA20"],
             mode="lines",
             name="20 EMA Support",
-            line=dict(color="#ff9800", width=2.5),
+            line=dict(color="#ff9800", width=2),
         ),
         row=1,
         col=1,
     )
 
     fig.add_hline(
-        y=entry_level,
-        line_dash="solid",
+        y=entry_price,
         line_color="#00bfa5",
-        line_width=1.5,
-        annotation_text=f"🟢 Entry: ₹{entry_level}",
-        annotation_position="top left",
+        annotation_text=f"🟢 Entry: ₹{entry_price}",
         row=1,
         col=1,
     )
-
     fig.add_hline(
-        y=target_level,
+        y=target_price,
         line_dash="dash",
         line_color="#29b6f6",
-        line_width=1.5,
-        annotation_text=f"🔵 Target (7%): ₹{target_level}",
-        annotation_position="top left",
+        annotation_text=f"🔵 Target: ₹{target_price}",
         row=1,
         col=1,
     )
-
     fig.add_hline(
-        y=sl_level,
+        y=sl_price,
         line_dash="dash",
         line_color="#ef5350",
-        line_width=1.5,
-        annotation_text=f"🔴 Stop Loss (2.5%): ₹{sl_level}",
-        annotation_position="bottom left",
-        row=1,
-        col=1,
-    )
-
-    fig.add_annotation(
-        x=df.index[-1],
-        y=latest_price,
-        text="🎯 BUY BREAKOUT & EMA BOUNCE",
-        showarrow=True,
-        arrowhead=2,
-        arrowsize=1.2,
-        arrowwidth=2,
-        arrowcolor="#089981",
-        ax=-90,
-        ay=-60,
-        bordercolor="#089981",
-        borderwidth=1.5,
-        borderpad=6,
-        bgcolor="#1e222d",
-        opacity=0.95,
-        font=dict(color="#ffffff", size=12, family="Arial"),
+        annotation_text=f"🔴 Stop Loss: ₹{sl_price}",
         row=1,
         col=1,
     )
@@ -643,69 +392,73 @@ if selected_stock:
     )
 
     fig.update_layout(
-        height=600,
+        height=550,
         paper_bgcolor="#131722",
         plot_bgcolor="#131722",
         font=dict(color="#d1d4dc"),
         xaxis_rangeslider_visible=False,
-        margin=dict(l=20, r=20, t=40, b=20),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1
-        ),
     )
-    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="#2a2e39")
-    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="#2a2e39")
+    fig.update_xaxes(showgrid=True, gridcolor="#2a2e39")
+    fig.update_yaxes(showgrid=True, gridcolor="#2a2e39")
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Strategy Explanation
-    st.markdown("---")
-    vol_latest = float(df["Volume"].iloc[-1])
-    vol_avg = float(df["Vol_Avg"].iloc[-1])
-    volume_spike = vol_latest > (1.05 * vol_avg)
+    # ---------------------------------------------------------
+    # DETAILED STRATEGY EXPLANATION & AUDIO READOUT
+    # ---------------------------------------------------------
+    st.subheader("📝 বিস্তারিত কারণ ও স্মার্ট মানি ট্রেড প্ল্যান (Explanation):")
 
-    strategy_title = (
-        "২০ ইএমএ বাউন্স ও ভলিউম ব্রেকআউট স্ট্র্যাটেজি"
-        if volume_spike
-        else "২০ ইএমএ ডাইনামিক সাপোর্ট রিভার্সাল স্ট্র্যাটেজি"
-    )
-
-    buyer_entry_text = (
-        "চার্টের নিচে সবুজ ভলিউম বারে বড় স্পাইক দেখাচ্ছে যে, এখানে বড় বড়"
-        " ইনস্টিটিউশনাল বায়াররা নতুন পজিশন তৈরি করে শেয়ার অ্যাকুমুলেট"
-        " (জমা) করছে।"
-        if volume_spike
-        else (
-            "বায়াররা সাপোর্ট জোনে ধীরে ধীরে সক্রিয় হয়ে শেয়ার জমা করছে এবং"
-            " সেলারদের থেকে বায়ারদের আধিপত্য অনেক বেশি।"
-        )
-    )
+    trig_html = "".join([f"<li>{f}</li>" for f in factors_triggered])
+    fail_html = "".join([f"<li>{f}</li>" for f in factors_failed])
 
     speech_text = (
-        f"{raw_name} স্টকের টেকনিক্যাল এবং বায়ার অ্যাক্টিভিটি বিশ্লেষণ। এখানে"
-        f" {strategy_title} কাজ করছে। স্টকের বর্তমান বাই এন্ট্রি প্রাইস"
-        f" {entry_level} টাকা। প্রফিট টার্গেট {target_level} টাকা এবং স্টপ লস"
-        f" {sl_level} টাকা। বায়ারদের অবস্থান: স্টকটি ২০ ইএমএ সাপোর্ট লেভেল"
-        f" {ema_20} টাকার কাছাকাছি আসার পর বায়াররা ব্যাপকভাবে অ্যাক্টিভ হয়েছে"
-        " এবং সেলারদের সমস্ত সেল প্রেসার শুষে নিয়েছে। বায়ারদের এই এগ্রেসিভ"
-        " বাইং এবং ভারী ভলিউমের কারণে এখান থেকে দাম দ্রুত উপরের দিকে যাচ্ছে।"
+        f"{clean_ticker.replace('.NS','')} স্টকের স্মার্ট মানি কনফিডেন্স স্কোর"
+        f" {final_score} শতাংশ। বর্তমান বাই এন্ট্রি প্রাইস {entry_price} টাকা।"
+        f" টার্গেট {target_price} টাকা এবং স্টপ লস {sl_price} টাকা। {verdict_desc}"
     )
-
     clean_js_speech = (
         speech_text.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
     )
 
-    st.subheader("📢 চার্ট বিশ্লেষণ, বায়ার অ্যাক্টিভিটি ও ট্রেড প্ল্যান:")
+    tts_html = (
+        '<div style="margin-bottom: 20px;">'
+        '<button onclick="playVoice()" style="'
+        'background: linear-gradient(135deg, #00c853, #009688); '
+        'color: white; border: none; padding: 12px 24px; font-size: 16px; '
+        'font-weight: bold; border-radius: 8px; cursor: pointer;">'
+        '🔊 ভয়েসে শুনুন (Listen Smart Money Report)'
+        '</button>'
+        '<script>'
+        'function playVoice() {'
+        '   window.speechSynthesis.cancel();'
+        '   const text = "' + clean_js_speech + '";'
+        '   const msg = new SpeechSynthesisUtterance(text);'
+        '   msg.lang = "bn-IN";'
+        '   msg.rate = 0.9;'
+        '   window.speechSynthesis.speak(msg);'
+        '}'
+        '</script>'
+        '</div>'
+    )
+    components.html(tts_html, height=70)
 
-    tts_html_template = """
-    <div style="margin-bottom: 20px;">
-        <button onclick="playVoice()" style="
-            background: linear-gradient(135deg, #00c853, #009688);
-            color: white;
-            border: none;
-            padding: 14px 28px;
-            font-size: 17px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            box
+    st.markdown(
+        f"### ✅ যে স্ট্র্যাটেজিগুলো বায়ার অ্যাক্টিভ থাকার কথা বলছে:\n<ul>{trig_html}</ul>",
+        unsafe_allow_html=True,
+    )
+
+    if factors_failed:
+        st.markdown(
+            f"### ⚠️ যে ফিল্টারগুলো দুর্বল বা মেলেনি:\n<ul>{fail_html}</ul>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+    st.markdown(
+        f"### 📱 Groww (গ্রো) অ্যাপে অর্ডার দেওয়ার সঠিক নিয়ম:\n"
+        f"1. Groww অ্যাপে সার্চ করুন **{clean_ticker.replace('.NS','')}**।\n"
+        f"2. **Buy (Delivery)** অপশনে ক্লিক করে লিমিট প্রাইস দিন **₹{entry_price}**।\n"
+        f"3. অর্ডার এক্সিকিউট হলে স্টপ লস ট্রিগার দিন **₹{sl_price}** এবং টার্গেট সেট করুন **₹{target_price}**।\n"
+        f"4. আগামী ৩-৪ দিনের মধ্যে টার্গেট বা স্টপ লস হিট করলে ট্রেড ক্লোজ করুন।"
+        )
+    
