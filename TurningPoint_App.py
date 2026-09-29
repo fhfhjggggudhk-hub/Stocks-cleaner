@@ -1,40 +1,3 @@
-import os
-import subprocess
-import sys
-
-# ---------------------------------------------------------
-# ১. প্রয়োজনীয় সব লাইব্রেরি অটোমেটিক চেক ও ইনস্টল করার অংশ
-# ---------------------------------------------------------
-REQUIRED_PACKAGES = [
-    "streamlit",
-    "plotly",
-    "pandas",
-    "numpy",
-    "yfinance",
-    "requests",
-    "git+https://github.com/rongardF/tvdatafeed.git",
-]
-
-
-def install_missing_packages():
-    for package in REQUIRED_PACKAGES:
-        try:
-            pkg_name = (
-                "tvdatafeed" if "git+" in package else package.split("==")[0]
-            )
-            __import__(pkg_name)
-        except ImportError:
-            print(f"Installing {package}...")
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", package]
-            )
-
-
-install_missing_packages()
-
-# ---------------------------------------------------------
-# ২. মূল অ্যানালাইজার কোড
-# ---------------------------------------------------------
 import re
 import numpy as np
 import pandas as pd
@@ -43,9 +6,16 @@ from plotly.subplots import make_subplots
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
-import yfinance as yf
 
-# TradingView Library Import Check
+# Safe Import for YFinance
+try:
+    import yfinance as yf
+
+    HAS_YFINANCE = True
+except ImportError:
+    HAS_YFINANCE = False
+
+# Safe Import for TradingView Datafeed
 try:
     from tvDatafeed import Interval, TvDatafeed
 
@@ -62,13 +32,12 @@ st.set_page_config(
 
 st.title("🎯 স্মার্ট মানি ও ইনস্টিটিউশনাল অ্যাকুমুলেশন অ্যানালাইজার")
 st.caption(
-    "TradingView & Multi-Source Realtime Engine (মেগা ১০-ফ্যাক্টর কনফ্লুয়েন্স"
-    " স্কোরিং এনজিন)"
+    "Multi-Source Realtime Engine (TradingView, Yahoo API & Google Finance Sync)"
 )
 
 
 # ---------------------------------------------------------
-# TRADINGVIEW + MULTI-SOURCE DIRECT NSE ENGINE
+# MULTI-SOURCE DIRECT NSE ENGINE
 # ---------------------------------------------------------
 @st.cache_resource
 def get_tv_engine():
@@ -153,7 +122,7 @@ def fetch_real_stock_data(symbol_str):
             pass
 
     # Source 3: Standard YFinance Download
-    if df is None or df.empty:
+    if (df is None or df.empty) and HAS_YFINANCE:
         try:
             yf_symbol = f"{clean_ticker}.NS"
             temp_df = yf.download(
@@ -203,7 +172,7 @@ analyze_btn = st.sidebar.button(
 )
 
 if stock_input:
-    with st.spinner("TradingView / NSE থেকে আসল ক্যান্ডেল ডেটা আনা হচ্ছে..."):
+    with st.spinner("লাইভ মার্কেট ডেটা আনা হচ্ছে..."):
         df, clean_ticker = fetch_real_stock_data(stock_input)
 
     if df is None or df.empty:
@@ -212,7 +181,7 @@ if stock_input:
             " সঠিক আছে কিনা চেক করুন।"
         )
     else:
-        # Indicator Calculations
+        # Technical Indicator Calculations
         df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
         df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
         df["Vol_Avg20"] = df["Volume"].rolling(20).mean()
@@ -252,7 +221,7 @@ if stock_input:
         vwap_val = float(latest["VWAP"])
         mfi_val = float(latest["MFI"]) if not np.isnan(latest["MFI"]) else 55.0
 
-        # Scoring Logic
+        # Smart Money Scoring Logic
         total_candle_range = max(c_high - c_low, 0.01)
         body_range = abs(c_close - c_open)
         lower_wick = min(c_open, c_close) - c_low
@@ -395,7 +364,7 @@ if stock_input:
             shared_xaxes=True,
             vertical_spacing=0.03,
             subplot_titles=(
-                f"TradingView Real NSE Daily Chart ({clean_ticker})",
+                f"Real Daily Chart ({clean_ticker})",
                 "Volume Breakdown",
             ),
             row_width=[0.22, 0.78],
@@ -479,7 +448,7 @@ if stock_input:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # Audio & Text Summary
+        # Audio & Report Section
         st.subheader("📝 বিস্তারিত কারণ ও স্মার্ট মানি প্ল্যান:")
 
         speech_text = (
@@ -521,4 +490,4 @@ if stock_input:
             st.markdown(
                 f"### ⚠️ যে ফিল্টারগুলো দুর্বল:\n<ul>{fail_html}</ul>",
                 unsafe_allow_html=True,
-            )
+)
