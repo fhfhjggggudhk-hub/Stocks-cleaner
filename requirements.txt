@@ -8,3 +8,4 @@ pandas
 numpy
 yfinance
 requests
+git+https://github.com/rongardF/tvdatafeed.git
