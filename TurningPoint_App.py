@@ -21,19 +21,19 @@ st.caption(
 
 
 # ---------------------------------------------------------
-# REAL-TIME LTP SCRAPER (GOOGLE FINANCE)
+# REAL-TIME GOOGLE FINANCE LTP SCRAPER
 # ---------------------------------------------------------
 def fetch_realtime_ltp(raw_symbol):
-    """Google Finance থেকে লাইভ LTP স্ক্র্যাপ করে যাতে ১ পয়সারও ডিফারেন্স না থাকে"""
+    """Google Finance থেকে লাইভ রিয়েল-টাইম দাম নিয়ে আসে"""
     try:
         url = f"https://www.google.com/finance/quote/{raw_symbol}:NSE"
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                " (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                " (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             )
         }
-        resp = requests.get(url, headers=headers, timeout=4)
+        resp = requests.get(url, headers=headers, timeout=5)
         if resp.status_code == 200:
             match = re.search(r'data-last-price="([\d\.]+)"', resp.text)
             if match:
@@ -43,32 +43,13 @@ def fetch_realtime_ltp(raw_symbol):
                 return float(match_curr.group(1).replace(",", ""))
     except Exception:
         pass
-
-    # Backup Yahoo Fast Quote
-    try:
-        url = f"https://query1.finance.yahoo.com/v7/finance/options/{raw_symbol}.NS"
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
-        }
-        resp = requests.get(url, headers=headers, timeout=4)
-        if resp.status_code == 200:
-            data = resp.json()
-            price = data["optionChain"]["result"][0]["quote"][
-                "regularMarketPrice"
-            ]
-            return float(price)
-    except Exception:
-        pass
-
     return None
 
 
 # ---------------------------------------------------------
-# BULLETPROOF DATA ENGINE WITH PERFECT PRICE SYNC
+# 100% REAL HISTORICAL DATA ENGINE (NO SYNTHETIC/FAKE DATA)
 # ---------------------------------------------------------
-def fetch_stock_data_bulletproof(ticker_symbol):
+def fetch_stock_data_pure_real(ticker_symbol):
     clean_symbol = ticker_symbol.strip().upper()
     raw_symbol = (
         clean_symbol.replace(".NS", "")
@@ -78,23 +59,28 @@ def fetch_stock_data_bulletproof(ticker_symbol):
     )
     yf_symbol = f"{raw_symbol}.NS"
 
-    # Step 1: Fetch Absolute Real-Time Price First
+    # Step 1: Live Price Fetch
     realtime_price = fetch_realtime_ltp(raw_symbol)
 
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        )
+            " (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+        "Referer": "https://finance.yahoo.com/",
     }
 
     df = None
 
-    # Step 2: Fetch Historical Data via Direct Yahoo API
-    for domain in ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]:
+    # Step 2: Try Direct Yahoo Finance Chart v8 Endpoint (Real NSE Candles)
+    for domain in [
+        "query2.finance.yahoo.com",
+        "query1.finance.yahoo.com",
+    ]:
         try:
             url = f"https://{domain}/v8/finance/chart/{yf_symbol}?range=6m&interval=1d"
-            res = requests.get(url, headers=headers, timeout=5)
+            res = requests.get(url, headers=headers, timeout=6)
             if res.status_code == 200:
                 data = res.json()
                 if "chart" in data and data["chart"]["result"]:
@@ -117,65 +103,35 @@ def fetch_stock_data_bulletproof(ticker_symbol):
                     temp_df.bfill(inplace=True)
                     temp_df.ffill(inplace=True)
 
-                    if not temp_df.empty and len(temp_df) >= 20:
+                    if not temp_df.empty and len(temp_df) >= 15:
                         df = temp_df
                         break
         except Exception:
             continue
 
-    # Backup Historical Fetch via yfinance library
+    # Step 3: Backup yfinance library
     if df is None or df.empty:
         try:
-            temp_df = yf.download(
-                yf_symbol, period="6m", interval="1d", progress=False
-            )
-            if isinstance(temp_df.columns, pd.MultiIndex):
-                temp_df.columns = temp_df.columns.get_level_values(0)
-            if temp_df is not None and not temp_df.empty and len(temp_df) >= 20:
+            ticker_obj = yf.Ticker(yf_symbol)
+            temp_df = ticker_obj.history(period="6m", interval="1d")
+            if temp_df is not None and not temp_df.empty:
+                if isinstance(temp_df.columns, pd.MultiIndex):
+                    temp_df.columns = temp_df.columns.get_level_values(0)
                 df = temp_df[["Open", "High", "Low", "Close", "Volume"]].dropna()
         except Exception:
             pass
 
-    # Step 3: Align Last Candle Close with Realtime Price (Fixes Price Difference Issue)
+    # Step 4: Synchronize Last Candle Price with Live Market LTP
     if df is not None and not df.empty:
         if realtime_price is not None and realtime_price > 0:
             df.iloc[-1, df.columns.get_loc("Close")] = realtime_price
             df.iloc[-1, df.columns.get_loc("High")] = max(
-                realtime_price, df.iloc[-1]["High"]
+                realtime_price, float(df.iloc[-1]["High"])
             )
             df.iloc[-1, df.columns.get_loc("Low")] = min(
-                realtime_price, df.iloc[-1]["Low"]
+                realtime_price, float(df.iloc[-1]["Low"])
             )
         return df, raw_symbol
-
-    # Step 4: Synthetic Generator Fallback (If Yahoo is completely blocked)
-    if realtime_price is not None and realtime_price > 0:
-        dates = pd.date_range(end=pd.Timestamp.now(), periods=120, freq="B")
-        np.random.seed(abs(hash(raw_symbol)) % 10000)
-
-        returns = np.random.normal(0.0005, 0.015, size=len(dates) - 1)
-        cum_returns = np.exp(np.cumsum(returns))
-        cum_returns = np.insert(cum_returns, 0, 1.0)
-
-        scaled_prices = (cum_returns / cum_returns[-1]) * realtime_price
-
-        df_synthetic = pd.DataFrame(
-            {
-                "Open": scaled_prices
-                * (1 - np.random.uniform(0, 0.004, len(dates))),
-                "High": scaled_prices
-                * (1 + np.random.uniform(0.002, 0.012, len(dates))),
-                "Low": scaled_prices
-                * (1 - np.random.uniform(0.002, 0.012, len(dates))),
-                "Close": scaled_prices,
-                "Volume": np.random.randint(150000, 2500000, size=len(dates)),
-            },
-            index=dates,
-        )
-        df_synthetic.iloc[-1, df_synthetic.columns.get_loc("Close")] = (
-            realtime_price
-        )
-        return df_synthetic, raw_symbol
 
     return None, raw_symbol
 
@@ -185,20 +141,23 @@ def fetch_stock_data_bulletproof(ticker_symbol):
 # ---------------------------------------------------------
 st.sidebar.header("🔍 একক স্টক অ্যানালাইসিস")
 stock_input = st.sidebar.text_input(
-    "স্টকের টিকার লিখুন (যেমন: IFBAGRO, NUVAMA, SBIN):", "IFBAGRO"
+    "স্টকের টিকার লিখুন (যেমন: IFBAGRO, NUVAMA, TATAMOTORS):", "IFBAGRO"
 )
 analyze_btn = st.sidebar.button(
     "⚡ স্মার্ট মানি স্ক্যান করুন", use_container_width=True
 )
 
 if stock_input:
-    with st.spinner("এনএসই (NSE) থেকে লাইভ মার্কেট ডেটা আনা হচ্ছে..."):
-        df, clean_ticker = fetch_stock_data_bulletproof(stock_input)
+    with st.spinner(
+        "NSE (National Stock Exchange) থেকে আসল লাইভ ডেটা আনা হচ্ছে..."
+    ):
+        df, clean_ticker = fetch_stock_data_pure_real(stock_input)
 
     if df is None or df.empty:
         st.error(
-            f"❌ **'{stock_input}'** স্টকের নাম খুঁজে পাওয়া যায়নি। দয়া করে সঠিক"
-            " টিকার লিখুন।"
+            f"❌ **'{stock_input}'** স্টকের আসল লাইভ ডেটা আনতে সমস্যা হয়েছে।"
+            " অনুগ্রহ করে স্টকের নাম সঠিকভাবে চেক করুন বা ১ মিনিট পর আবার চেষ্টা"
+            " করুন।"
         )
     else:
         # ---------------------------------------------------------
@@ -233,7 +192,11 @@ if stock_input:
         c_low = float(latest["Low"])
         c_close = float(latest["Close"])
         c_vol = float(latest["Volume"])
-        vol_avg = float(latest["Vol_Avg20"])
+        vol_avg = (
+            float(latest["Vol_Avg20"])
+            if not np.isnan(latest["Vol_Avg20"])
+            else c_vol
+        )
         ema20_val = float(latest["EMA20"])
         ema50_val = float(latest["EMA50"])
         vwap_val = float(latest["VWAP"])
@@ -256,15 +219,13 @@ if stock_input:
         if rvol >= 1.8:
             score += 15
             factors_triggered.append(
-                f"<b>RVOL Spiked ({round(rvol, 2)}x):</b> সেদিনের ভলিউম গত ২০"
-                " দিনের গড়ের চেয়ে ১.৮ গুণেরও বেশি। ইনস্টিটিউশনাল এন্ট্রি"
-                " কনফার্মড।"
+                f"<b>RVOL Spiked ({round(rvol, 2)}x):</b> ভলিউম গত ২০ দিনের"
+                " গড়ের ১.৮ গুণের বেশি। ইনস্টিটিউশনাল অ্যাক্টিভিটি স্পষ্ট।"
             )
         elif rvol >= 1.2:
             score += 8
             factors_triggered.append(
-                f"<b>Moderate RVOL ({round(rvol, 2)}x):</b> ভলিউম গড়ের চেয়ে বেশ"
-                " ভালো।"
+                f"<b>Moderate RVOL ({round(rvol, 2)}x):</b> ভলিউম সন্তোষজনক।"
             )
         else:
             factors_failed.append(
@@ -276,15 +237,14 @@ if stock_input:
             score += 15
             factors_triggered.append(
                 "<b>Strong Buyer Rejection"
-                f" ({round(lower_wick_ratio*100, 1)}% Lower Wick):</b>"
-                " ক্যান্ডেলের ৫০%-এর বেশি অংশ জুড়ে রয়েছে নিচের ছায়া। বায়াররা"
-                " ওপরে প্রাইস বন্ধ করেছে।"
+                f" ({round(lower_wick_ratio*100, 1)}% Lower Wick):</b> ক্যান্ডেলের"
+                " ৫০%-এর বেশি অংশ জুড়ে রয়েছে নিচের উইক/ছায়া।"
             )
         elif lower_wick_ratio >= 0.3:
             score += 8
             factors_triggered.append(
                 f"<b>Moderate Lower Wick ({round(lower_wick_ratio*100, 1)}%):</b>"
-                " নিচ থেকে বাইং সাপোর্ট রয়েছে।"
+                " নিচ থেকে বায়ারদের সাপোর্ট আছে।"
             )
         else:
             factors_failed.append(
@@ -295,8 +255,8 @@ if stock_input:
         if body_range / total_candle_range <= 0.45 and rvol >= 1.3:
             score += 15
             factors_triggered.append(
-                "<b>Volume Spread Analysis (VSA):</b> ক্যান্ডেলের বডি ছোট কিন্তু"
-                " ভলিউম অনেক বেশি! স্মার্ট মানি সেলিং প্রেশার শুষে নিয়েছে।"
+                "<b>Volume Spread Analysis (VSA):</b> ছোট বডিতে বিশাল ভলিউম!"
+                " সেলিং প্রেশার অ্যাবজর্ব করা হয়েছে।"
             )
 
         # Factor 4: Confluence Support
@@ -305,49 +265,44 @@ if stock_input:
         if near_ema20 and near_ema50:
             score += 15
             factors_triggered.append(
-                "<b>Dual Confluence Support:</b> একই জায়গায় 20 EMA এবং 50 EMA"
-                " সাপোর্ট হিসেবে দাঁড়িয়ে আছে।"
+                "<b>Dual Confluence Support:</b> 20 EMA এবং 50 EMA একই সাথে"
+                " সাপোর্ট হিসেবে কাজ করছে।"
             )
         elif near_ema20 or near_ema50:
             score += 10
             factors_triggered.append(
-                "<b>Dynamic EMA Support:</b> স্টকটি ২০/৫০ ইএমএ সাপোর্ট লেভেল"
-                " ছুঁয়ে বাউন্স করছে।"
+                "<b>Dynamic EMA Support:</b> ২০/৫০ ইএমএ সাপোর্ট জোন থেকে বাউন্স"
+                " করছে।"
             )
         else:
-            factors_failed.append("স্টকটি ইএমএ সাপোর্ট জোন থেকে কিছুটা দূরে।")
+            factors_failed.append("স্টকটি ইএমএ সাপোর্ট লেভেল থেকে দূরে।")
 
         # Factor 5: VWAP Hold
         if c_close >= vwap_val:
             score += 10
             factors_triggered.append(
-                "<b>VWAP Hold:</b> স্টকটি ইনস্টটিউশনাল বেঞ্চমার্ক VWAP লাইনের"
-                " ওপরে ট্রেড করছে।"
+                "<b>VWAP Hold:</b> স্টকটি ইনস্টিটিউশনাল VWAP বেঞ্চমার্কের ওপর"
+                " রয়েছে।"
             )
         else:
-            factors_failed.append(
-                "স্টকটি VWAP লাইনের নিচে আছে (সেলার প্রেশার নির্দেশ করে)।"
-            )
+            factors_failed.append("স্টকটি VWAP লাইনের নিচে আছে।")
 
         # Factor 6: MFI Money Flow
         if mfi_val >= 50:
             score += 10
             factors_triggered.append(
                 f"<b>Positive Money Flow (MFI: {round(mfi_val, 1)}):</b> স্টকে"
-                " ক্যাশ ইনফ্লো বা টাকা ঢোকার সংকেত স্পষ্ট।"
+                " ক্যাশ ইনফ্লো হচ্ছে।"
             )
         else:
-            factors_failed.append(
-                f"MFI দুর্বল ({round(mfi_val, 1)}), টাকা বের হওয়ার প্রবণতা"
-                " রয়েছে।"
-            )
+            factors_failed.append(f"MFI দুর্বল ({round(mfi_val, 1)})।")
 
         # Factor 7: Market Structure Shift
         if c_close > float(prev["Close"]):
             score += 10
             factors_triggered.append(
-                "<b>Market Structure Shift (MSS):</b> আগের দিনের ক্লোজিং"
-                " প্রাইসের ওপর বুলিশ মোমেন্টাম তৈরি হয়েছে।"
+                "<b>Market Structure Shift (MSS):</b> আগের দিনের ক্লোজিংয়ের ওপর"
+                " বুলিশ মোমেন্টাম।"
             )
 
         final_score = min(score, 100)
@@ -356,29 +311,28 @@ if stock_input:
             verdict_badge = "🔥 ULTRA HIGH CONVICTION SETUP"
             verdict_color = "#00c853"
             verdict_desc = (
-                "ইনস্টিটিউশনাল বায়াররা (Big Players) ১০০% সক্রিয়! ৩-৪ দিনের"
-                " মোমেন্টামের জন্য সেরা বাই সেটআপ।"
+                "ইনস্টিটিউশনাল বায়াররা সক্রিয়! ৩-৪ দিনের সুইং ট্রেডের জন্য"
+                " সেরা সেটআপ।"
             )
         elif final_score >= 70:
             verdict_badge = "🟢 GOOD CONVICTION SETUP"
             verdict_color = "#29b6f6"
             verdict_desc = (
-                "স্মার্ট মানি অ্যাক্টিভ থাকার শক্ত প্রমাণ রয়েছে। স্টপ লস মেনে"
-                " এন্ট্রি নেওয়া যায়।"
+                "স্মার্ট মানি অ্যাক্টিভ থাকার প্রমাণ আছে। স্টপ লস মেনে বাই করা"
+                " যায়।"
             )
         elif final_score >= 50:
             verdict_badge = "🟡 NEUTRAL / WEAK BOUNCE"
             verdict_color = "#ffb300"
             verdict_desc = (
-                "আংশিক বায়ার রয়েছে তবে যথেষ্ট কনফার্মেশন নেই। অপেক্ষা করাই"
-                " ভালো।"
+                "আংশিক বায়ার রয়েছে তবে যথেষ্ট কনফার্মেশন নেই। অপেক্ষা করা ভালো।"
             )
         else:
             verdict_badge = "🔴 DANGER - FAKE BOUNCE / SELLING LIKELY"
             verdict_color = "#ff3d00"
             verdict_desc = (
-                "এটি একটি ফেক বাউন্স! নিচে আরও সেলিং আসার সম্ভাবনা বেশি। ভুলেও"
-                " বাই করবেন না।"
+                "এটি একটি ফেক বাউন্স! সেলিং প্রেশার আসার আশঙ্কা বেশি। বাই করবেন"
+                " না।"
             )
 
         entry_price = round(c_close, 2)
@@ -405,7 +359,7 @@ if stock_input:
             shared_xaxes=True,
             vertical_spacing=0.03,
             subplot_titles=(
-                "Candlestick Chart with 20 EMA Support & Trade Levels",
+                "Real NSE Daily Candlestick Chart with Trade Levels",
                 "Volume Breakdown",
             ),
             row_width=[0.22, 0.78],
@@ -418,7 +372,7 @@ if stock_input:
                 high=df["High"],
                 low=df["Low"],
                 close=df["Close"],
-                name="Candle",
+                name="Real Candle",
                 increasing_line_color="#089981",
                 decreasing_line_color="#f23645",
             ),
@@ -431,7 +385,7 @@ if stock_input:
                 x=df.index,
                 y=df["EMA20"],
                 mode="lines",
-                name="20 EMA Support",
+                name="20 EMA",
                 line=dict(color="#ff9800", width=2),
             ),
             row=1,
@@ -540,14 +494,5 @@ if stock_input:
             st.markdown(
                 f"### ⚠️ যে ফিল্টারগুলো দুর্বল বা মেলেনি:\n<ul>{fail_html}</ul>",
                 unsafe_allow_html=True,
-            )
-
-        st.markdown("---")
-        st.markdown(
-            f"### 📱 Groww (গ্রো) অ্যাপে অর্ডার দেওয়ার সঠিক নিয়ম:\n"
-            f"1. Groww অ্যাপে সার্চ করুন **{clean_ticker}**।\n"
-            f"2. **Buy (Delivery)** অপশনে ক্লিক করে লিমিট প্রাইস দিন **₹{entry_price}**।\n"
-            f"3. অর্ডার এক্সিকিউট হলে স্টপ লস ট্রিগার দিন **₹{sl_price}** এবং টার্গেট সেট করুন **₹{target_price}**।\n"
-            f"4. আগামী ৩-৪ দিনের মধ্যে টার্গেট বা স্টপ লস হিট করলে ট্রেড ক্লোজ করুন।"
-                    )
-        
+        )
+            
