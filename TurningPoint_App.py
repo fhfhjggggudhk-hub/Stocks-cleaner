@@ -1,3 +1,40 @@
+import os
+import subprocess
+import sys
+
+# ---------------------------------------------------------
+# ১. প্রয়োজনীয় সব লাইব্রেরি অটোমেটিক চেক ও ইনস্টল করার অংশ
+# ---------------------------------------------------------
+REQUIRED_PACKAGES = [
+    "streamlit",
+    "plotly",
+    "pandas",
+    "numpy",
+    "yfinance",
+    "requests",
+    "git+https://github.com/rongardF/tvdatafeed.git",
+]
+
+
+def install_missing_packages():
+    for package in REQUIRED_PACKAGES:
+        try:
+            pkg_name = (
+                "tvdatafeed" if "git+" in package else package.split("==")[0]
+            )
+            __import__(pkg_name)
+        except ImportError:
+            print(f"Installing {package}...")
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", package]
+            )
+
+
+install_missing_packages()
+
+# ---------------------------------------------------------
+# ২. মূল অ্যানালাইজার কোড
+# ---------------------------------------------------------
 import re
 import numpy as np
 import pandas as pd
@@ -8,21 +45,42 @@ import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
 
+# TradingView Library Import Check
+try:
+    from tvDatafeed import Interval, TvDatafeed
+
+    HAS_TV = True
+except Exception:
+    HAS_TV = False
+
+# Page Configuration
 st.set_page_config(
-    page_title="Smart Money Deep-Dive Analyzer", layout="wide"
+    page_title="Smart Money Deep-Dive Analyzer",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 st.title("🎯 স্মার্ট মানি ও ইনস্টিটিউশনাল অ্যাকুমুলেশন অ্যানালাইজার")
 st.caption(
-    "মেগা ১০-ফ্যাক্টর কনফ্লুয়েন্স স্কোরিং এনজিন (৩-৪ দিনের মোমেন্টাম ও সুইং"
-    " ট্রেড সেটআপ)"
+    "TradingView & Multi-Source Realtime Engine (মেগা ১০-ফ্যাক্টর কনফ্লুয়েন্স"
+    " স্কোরিং এনজিন)"
 )
 
 
 # ---------------------------------------------------------
-# DIRECT BULLETPROOF NSE DATA FETCH ENGINE
+# TRADINGVIEW + MULTI-SOURCE DIRECT NSE ENGINE
 # ---------------------------------------------------------
-def get_real_nse_data(symbol_str):
+@st.cache_resource
+def get_tv_engine():
+    if not HAS_TV:
+        return None
+    try:
+        return TvDatafeed()
+    except Exception:
+        return None
+
+
+def fetch_real_stock_data(symbol_str):
     clean_ticker = (
         symbol_str.strip()
         .upper()
@@ -30,48 +88,74 @@ def get_real_nse_data(symbol_str):
         .replace(".BO", "")
         .replace("^", "")
     )
-    yf_symbol = f"{clean_ticker}.NS"
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    }
-
     df = None
 
-    # Source 1: Direct Yahoo API Query
-    try:
-        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{yf_symbol}?range=6m&interval=1d"
-        req = requests.get(url, headers=headers, timeout=5)
-        if req.status_code == 200:
-            res = req.json()
-            if res.get("chart", {}).get("result"):
-                chart_data = res["chart"]["result"][0]
-                timestamps = chart_data.get("timestamp", [])
-                quotes = chart_data["indicators"]["quote"][0]
-
-                temp_df = pd.DataFrame(
-                    {
-                        "Open": quotes.get("open"),
-                        "High": quotes.get("high"),
-                        "Low": quotes.get("low"),
-                        "Close": quotes.get("close"),
-                        "Volume": quotes.get("volume"),
-                    },
-                    index=pd.to_datetime(timestamps, unit="s"),
+    # Source 1: Primary TradingView Data Feed
+    if HAS_TV:
+        try:
+            tv = get_tv_engine()
+            if tv is not None:
+                tv_df = tv.get_hist(
+                    symbol=clean_ticker,
+                    exchange="NSE",
+                    interval=Interval.in_daily,
+                    n_bars=120,
                 )
-                temp_df.dropna(subset=["Close"], inplace=True)
-                if len(temp_df) >= 10:
-                    df = temp_df
-    except Exception:
-        pass
+                if tv_df is not None and not tv_df.empty:
+                    df = tv_df.copy()
+                    df.rename(
+                        columns={
+                            "open": "Open",
+                            "high": "High",
+                            "low": "Low",
+                            "close": "Close",
+                            "volume": "Volume",
+                        },
+                        inplace=True,
+                    )
+                    df.index = pd.to_datetime(df.index)
+        except Exception:
+            df = None
 
-    # Source 2: YFinance Fallback
+    # Source 2: Direct Yahoo API Fallback
+    if df is None or df.empty:
+        yf_symbol = f"{clean_ticker}.NS"
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                " (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
+        }
+        try:
+            url = f"https://query2.finance.yahoo.com/v8/finance/chart/{yf_symbol}?range=6m&interval=1d"
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                json_data = res.json()
+                if json_data.get("chart", {}).get("result"):
+                    chart_res = json_data["chart"]["result"][0]
+                    timestamps = chart_res.get("timestamp", [])
+                    quote = chart_res["indicators"]["quote"][0]
+
+                    temp_df = pd.DataFrame(
+                        {
+                            "Open": quote.get("open"),
+                            "High": quote.get("high"),
+                            "Low": quote.get("low"),
+                            "Close": quote.get("close"),
+                            "Volume": quote.get("volume"),
+                        },
+                        index=pd.to_datetime(timestamps, unit="s"),
+                    )
+                    temp_df.dropna(subset=["Close"], inplace=True)
+                    if len(temp_df) >= 10:
+                        df = temp_df
+        except Exception:
+            pass
+
+    # Source 3: Standard YFinance Download
     if df is None or df.empty:
         try:
+            yf_symbol = f"{clean_ticker}.NS"
             temp_df = yf.download(
                 yf_symbol, period="6m", interval="1d", progress=False
             )
@@ -82,13 +166,14 @@ def get_real_nse_data(symbol_str):
         except Exception:
             pass
 
-    # Live Price Sync
+    # Source 4: Live Google Finance Sync
     if df is not None and not df.empty:
         try:
             g_url = f"https://www.google.com/finance/quote/{clean_ticker}:NSE"
-            g_req = requests.get(g_url, headers=headers, timeout=4)
-            if g_req.status_code == 200:
-                match = re.search(r'data-last-price="([\d\.]+)"', g_req.text)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            g_res = requests.get(g_url, headers=headers, timeout=3)
+            if g_res.status_code == 200:
+                match = re.search(r'data-last-price="([\d\.]+)"', g_res.text)
                 if match:
                     lp = float(match.group(1))
                     df.iloc[-1, df.columns.get_loc("Close")] = lp
@@ -100,13 +185,14 @@ def get_real_nse_data(symbol_str):
                     )
         except Exception:
             pass
+
         return df, clean_ticker
 
     return None, clean_ticker
 
 
 # ---------------------------------------------------------
-# INPUT SECTION
+# SIDEBAR & INPUT SECTION
 # ---------------------------------------------------------
 st.sidebar.header("🔍 একক স্টক অ্যানালাইসিস")
 stock_input = st.sidebar.text_input(
@@ -117,16 +203,16 @@ analyze_btn = st.sidebar.button(
 )
 
 if stock_input:
-    with st.spinner("NSE থেকে আসল ক্যান্ডেল ডেটা লোড করা হচ্ছে..."):
-        df, clean_ticker = get_real_nse_data(stock_input)
+    with st.spinner("TradingView / NSE থেকে আসল ক্যান্ডেল ডেটা আনা হচ্ছে..."):
+        df, clean_ticker = fetch_real_stock_data(stock_input)
 
     if df is None or df.empty:
         st.error(
-            f"❌ '{stock_input}' এর ডেটা সার্ভার থেকে পাওয়া যাচ্ছে না। নাম ঠিক"
-            " আছে কিনা বা অন্য কোনো স্টক চেক করুন।"
+            f"❌ **'{stock_input}'** স্টকের ডেটা পাওয়া যায়নি। স্টকের টিকার নাম"
+            " সঠিক আছে কিনা চেক করুন।"
         )
     else:
-        # Technical Indicator Calculations
+        # Indicator Calculations
         df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
         df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
         df["Vol_Avg20"] = df["Volume"].rolling(20).mean()
@@ -180,61 +266,82 @@ if stock_input:
         if rvol >= 1.8:
             score += 15
             factors_triggered.append(
-                f"<b>RVOL Spiked ({round(rvol, 2)}x):</b> ভলিউম স্পাইক করেছে।"
+                f"<b>RVOL Spiked ({round(rvol, 2)}x):</b> সেদিনের ভলিউম গত ২০"
+                " দিনের গড়ের ১.৮ গুণের বেশি।"
             )
         elif rvol >= 1.2:
             score += 8
             factors_triggered.append(
-                f"<b>Moderate RVOL ({round(rvol, 2)}x):</b> ভলিউম ভালো।"
+                f"<b>Moderate RVOL ({round(rvol, 2)}x):</b> বাজারে সন্তোষজনক"
+                " ভলিউম রয়েছে।"
             )
         else:
-            factors_failed.append("RVOL দুর্বল।")
+            factors_failed.append(
+                f"RVOL দুর্বল ({round(rvol, 2)}x)। ভলিউম পর্যাপ্ত নয়।"
+            )
 
         if lower_wick_ratio >= 0.5:
             score += 15
             factors_triggered.append(
-                "<b>Strong Buyer Rejection:</b> নিচ থেকে স্ট্রং বায়িং প্রেশার।"
+                "<b>Strong Buyer Rejection"
+                f" ({round(lower_wick_ratio*100, 1)}%):</b> ক্যান্ডেলের নিচ"
+                " থেকে বড় বায়িং রিজেকশন।"
             )
         elif lower_wick_ratio >= 0.3:
             score += 8
             factors_triggered.append(
-                "<b>Moderate Lower Wick:</b> বায়ারদের সাপোর্ট আছে।"
+                "<b>Moderate Lower Wick"
+                f" ({round(lower_wick_ratio*100, 1)}%):</b> নিচ থেকে বায়ারদের"
+                " সাপোর্ট আছে।"
             )
         else:
-            factors_failed.append("Lower Wick ছোট।")
+            factors_failed.append("Lower Wick ছোট। নিচ থেকে সাপোর্ট কম।")
 
-        if body_range / total_candle_range <= 0.45 and rvol >= 1.3:
+        if (body_range / total_candle_range <= 0.45) and (rvol >= 1.3):
             score += 15
             factors_triggered.append(
-                "<b>VSA Absorption:</b> সেলিং অ্যাবজর্বড করা হয়েছে।"
+                "<b>VSA Absorption:</b> ছোট বডিতে উচ্চ ভলিউম, সেলিং শুষে নেওয়া"
+                " হয়েছে।"
             )
 
         near_ema20 = abs(c_close - ema20_val) / ema20_val <= 0.02
         near_ema50 = abs(c_close - ema50_val) / ema50_val <= 0.02
-        if near_ema20 or near_ema50:
+        if near_ema20 and near_ema50:
             score += 15
             factors_triggered.append(
-                "<b>EMA Support:</b> ২০/৫০ ইএমএ সাপোর্ট জোন।"
+                "<b>Dual EMA Support:</b> ২০ ও ৫০ ইএমএ সাপোর্ট জোন।"
+            )
+        elif near_ema20 or near_ema50:
+            score += 10
+            factors_triggered.append(
+                "<b>Dynamic EMA Support:</b> ইএমএ সাপোর্ট লেভেল থেকে বাউন্স।"
             )
         else:
-            factors_failed.append("ইএমএ সাপোর্ট থেকে দূরে।")
+            factors_failed.append("ইএমএ সাপোর্ট জোন থেকে দূরে।")
 
         if c_close >= vwap_val:
             score += 10
-            factors_triggered.append("<b>VWAP Hold:</b> VWAP-এর ওপরে আছে।")
+            factors_triggered.append(
+                "<b>VWAP Hold:</b> ইনস্টিটিউশনাল VWAP বেঞ্চমার্কের ওপরে অবস্থান"
+                " করছে।"
+            )
         else:
-            factors_failed.append("VWAP-এর নিচে আছে।")
+            factors_failed.append("VWAP লাইনের নিচে ট্রেড করছে।")
 
         if mfi_val >= 50:
             score += 10
-            factors_triggered.append(f"<b>Positive Money Flow (MFI):</b> {round(mfi_val, 1)}")
+            factors_triggered.append(
+                f"<b>Positive Money Flow (MFI: {round(mfi_val, 1)}):</b> ক্যাশ"
+                " ইনফ্লো পজিটিভ।"
+            )
         else:
-            factors_failed.append(f"MFI দুর্বল: {round(mfi_val, 1)}")
+            factors_failed.append(f"MFI দুর্বল ({round(mfi_val, 1)})।")
 
         if c_close > float(prev["Close"]):
             score += 10
             factors_triggered.append(
-                "<b>Market Structure Shift:</b> আগের দিনের ওপরে ক্লোজিং।"
+                "<b>Market Structure Shift:</b> আগের দিনের ক্লোজিংয়ের ওপর"
+                " বুলিশ মোমেন্টাম।"
             )
 
         final_score = min(score, 100)
@@ -242,26 +349,34 @@ if stock_input:
         if final_score >= 80:
             verdict_badge = "🔥 ULTRA HIGH CONVICTION SETUP"
             verdict_color = "#00c853"
-            verdict_desc = "ইনস্টিটিউশনাল বায়াররা সক্রিয়! সুইং ট্রেড বাই সেটআপ।"
+            verdict_desc = (
+                "ইনস্টিটিউশনাল বায়াররা অত্যন্ত সক্রিয়! ৩-৪ দিনের সুইং ট্রেড বাই"
+                " সেটআপ।"
+            )
         elif final_score >= 70:
             verdict_badge = "🟢 GOOD CONVICTION SETUP"
             verdict_color = "#29b6f6"
-            verdict_desc = "স্মার্ট মানি অ্যাক্টিভ। স্টপ লস মেনে বাই করতে পারেন।"
+            verdict_desc = (
+                "স্মার্ট মানি সক্রিয়। কড়া স্টপ লস মেনে পজিশন নেওয়া যেতে পারে।"
+            )
         elif final_score >= 50:
             verdict_badge = "🟡 NEUTRAL / WEAK BOUNCE"
             verdict_color = "#ffb300"
-            verdict_desc = "কনফার্মেশন কম, অপেক্ষা করা ভালো।"
+            verdict_desc = (
+                "আংশিক বায়ার রয়েছে তবে কনফার্মেশন কম। অপেক্ষা করা ভালো।"
+            )
         else:
             verdict_badge = "🔴 DANGER - FAKE BOUNCE"
             verdict_color = "#ff3d00"
-            verdict_desc = "ফেক বাউন্স! এভোয়েড করুন।"
+            verdict_desc = "এটি একটি ফেক বাউন্স! নতুন করে বাই করবেন না।"
 
         entry_price = round(c_close, 2)
         target_price = round(entry_price * 1.07, 2)
         sl_price = round(entry_price * 0.975, 2)
 
         st.markdown(
-            f"<h2 style='color: {verdict_color};'>{clean_ticker} - {verdict_badge}</h2>",
+            f"<h2 style='color: {verdict_color};'>{clean_ticker} -"
+            f" {verdict_badge}</h2>",
             unsafe_allow_html=True,
         )
 
@@ -280,7 +395,7 @@ if stock_input:
             shared_xaxes=True,
             vertical_spacing=0.03,
             subplot_titles=(
-                "Real NSE Daily Candlestick Chart",
+                f"TradingView Real NSE Daily Chart ({clean_ticker})",
                 "Volume Breakdown",
             ),
             row_width=[0.22, 0.78],
@@ -359,9 +474,51 @@ if stock_input:
             font=dict(color="#d1d4dc"),
             xaxis_rangeslider_visible=False,
         )
+        fig.update_xaxes(showgrid=True, gridcolor="#2a2e39")
+        fig.update_yaxes(showgrid=True, gridcolor="#2a2e39")
+
         st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("📝 ট্রেড প্ল্যান বিশ্লেষণ:")
+        # Audio & Text Summary
+        st.subheader("📝 বিস্তারিত কারণ ও স্মার্ট মানি প্ল্যান:")
+
+        speech_text = (
+            f"{clean_ticker} স্টকের স্মার্ট মানি কনফিডেন্স স্কোর {final_score}"
+            f" শতাংশ। বর্তমান বাই এন্ট্রি প্রাইস {entry_price} টাকা। টার্গেট"
+            f" {target_price} টাকা এবং স্টপ লস {sl_price} টাকা। {verdict_desc}"
+        )
+        clean_js_speech = (
+            speech_text.replace("'", "\\'").replace('"', '\\"').replace("\n", " ")
+        )
+
+        tts_html = f"""
+        <div style="margin-bottom: 20px;">
+            <button onclick="playVoice()" style="background: linear-gradient(135deg, #00c853, #009688); color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer;">
+                🔊 ভয়েসে শুনুন (Listen Smart Money Report)
+            </button>
+            <script>
+            function playVoice() {{
+                window.speechSynthesis.cancel();
+                const text = "{clean_js_speech}";
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.lang = "bn-IN";
+                msg.rate = 0.9;
+                window.speechSynthesis.speak(msg);
+            }}
+            </script>
+        </div>
+        """
+        components.html(tts_html, height=70)
+
         trig_html = "".join([f"<li>{f}</li>" for f in factors_triggered])
-        st.markdown(f"<ul>{trig_html}</ul>", unsafe_allow_html=True)
-        
+        fail_html = "".join([f"<li>{f}</li>" for f in factors_failed])
+
+        st.markdown(
+            f"### ✅ যে ফিল্টারগুলো মিলেছে:\n<ul>{trig_html}</ul>",
+            unsafe_allow_html=True,
+        )
+        if factors_failed:
+            st.markdown(
+                f"### ⚠️ যে ফিল্টারগুলো দুর্বল:\n<ul>{fail_html}</ul>",
+                unsafe_allow_html=True,
+            )
