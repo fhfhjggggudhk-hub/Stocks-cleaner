@@ -2,10 +2,6 @@ streamlit
 yfinance
 pandas
 plotly
-streamlit
-plotly
-pandas
-numpy
 yfinance
-requests
-git+https://github.com/rongardF/tvdatafeed.git
+pandas
+streamlit
