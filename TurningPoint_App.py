@@ -12,7 +12,7 @@ st.write(
     "৯৬৩টি ইউনিক স্টকে Higher Low (HL) রিটেস্ট এবং Big Buyer Volume Surge ট্র্যাক করুন।"
 )
 
-# ২. ৯৬৩টি ইউনিক সেক্টর-ওয়াইজ স্টক লিস্ট (ডুপ্লিকেট মুক্ত)
+# ২. ৯৬৩টি ইউনিক সেক্টর-ওয়াইজ স্টক লিস্ট
 SECTOR_STOCKS = {
     "🏦 Banking, Finance & NBFC": [
         "HDFCBANK.NS",
@@ -769,32 +769,25 @@ def scan_smart_money_retest(ticker):
         if len(df) < 50:
             return None
 
-        # ক্লোজ ও ভলিউম ডেটা
         current_close = float(df["Close"].iloc[-1].values[0])
         previous_close = float(df["Close"].iloc[-2].values[0])
         current_volume = float(df["Volume"].iloc[-1].values[0])
 
-        # গত ২০ দিনের গড় ভলিউম
         avg_volume_20 = float(df["Volume"].rolling(20).mean().iloc[-1].values[0])
 
-        # সাপোর্ট ও লেভেল
         recent_high = float(df["High"].iloc[-20:-3].max().values[0])
         recent_low = float(df["Low"].iloc[-20:-3].min().values[0])
         sma_20 = float(df["Close"].rolling(20).mean().iloc[-1].values[0])
 
-        # ১. Higher Low (HL) ফিল্টার
         is_higher_low = current_close > recent_low
 
-        # ২. Retest জোন ফিল্টার
         retest_high = recent_high * 1.025
         retest_low = recent_high * 0.97
         near_retest = retest_low <= current_close <= retest_high
         near_sma = (sma_20 * 0.985) <= current_close <= (sma_20 * 1.015)
 
-        # ৩. গ্রিন বাউন্স ক্যান্ডেল
         is_green_candle = current_close > previous_close
 
-        # ৪. Big Player Volume Surge (১.৩ গুণ বা বেশি)
         volume_surge_ratio = (
             round(current_volume / avg_volume_20, 2) if avg_volume_20 > 0 else 1.0
         )
@@ -840,8 +833,12 @@ if st.button("🚀 Scan All 963 Stocks Now"):
 
     status_text.text("Scan Completed Successfully!")
 
-    # রেজাল্ট টেবিল
+    # রেজাল্ট প্রদর্শন
     if matched_results:
         final_df = pd.DataFrame(matched_results)
-        final_df = final_df[
-          
+        st.success(
+            f"মোট {len(final_df)} টি স্টকে Higher Low এবং রিটেস্ট ফিল্টার ম্যাচ করেছে:"
+        )
+        st.dataframe(final_df, use_container_width=True)
+    else:
+        st.warning("আজকে কোনো স্টকে উপযুক্ত Higher Low রিটেস্ট প্যাটার্ন পাওয়া যায়নি।")
