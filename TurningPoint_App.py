@@ -2,7 +2,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
-# ১. মূল সেক্টর অনুযায়ী জনপ্রিয় ও লিকুইড স্টকের তালিকা
+# ১. মূল সেক্টর অনুযায়ী জনপ্রিয় ও লিকুইড স্টকের তালিকা (সব ভুল কমা সংশোধন করা হয়েছে)
 SECTOR_STOCKS = {
     "Financial & Banking": [
         "HDFCBANK.NS",
@@ -23,7 +23,7 @@ SECTOR_STOCKS = {
         "WIPRO.NS",
         "TECHM.NS",
         "LTIM.NS",
-        "PERSISTENT.NS",,
+        "PERSISTENT.NS",
         "COFORGE.NS",
         "MPHASIS.NS",
     ],
@@ -33,7 +33,7 @@ SECTOR_STOCKS = {
         "MARUTI.NS",
         "BAJAJ-AUTO.NS",
         "EICHERMOT.NS",
-        "HEROMOTOCO.NS",,
+        "HEROMOTOCO.NS",
         "TVSMOTOR.NS",
         "BHARATFORG.NS",
     ],
@@ -42,7 +42,7 @@ SECTOR_STOCKS = {
         "DRREDDY.NS",
         "CIPLA.NS",
         "DIVISLAB.NS",
-        "APOLLOHOSP.NS",,
+        "APOLLOHOSP.NS",
         "LUPIN.NS",
         "TORNTPHARM.NS",
         "MANKIND.NS",
@@ -179,4 +179,5 @@ if matched_results:
 else:
     print(
         "বর্তমানে কোনো সেক্টরের স্টকে উপযুক্ত রিটেস্ট প্যাটার্ন পাওয়া যায়নি।"
-              )
+        )
+    
