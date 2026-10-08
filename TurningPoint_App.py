@@ -1,8 +1,18 @@
-import time
 import pandas as pd
+import streamlit as st
 import yfinance as yf
 
-# ১. মূল সেক্টর অনুযায়ী জনপ্রিয় ও লিকুইড স্টকের তালিকা (সব ভুল কমা সংশোধন করা হয়েছে)
+# পেজ কনফিগারেশন
+st.set_page_config(
+    page_title="Retest Stock Screener", page_icon="📈", layout="wide"
+)
+
+st.title("📈 Sector-Wise Retest Stock Screener (NSE)")
+st.write(
+    "নিচের বাটনে ক্লিক করে এনএসই-এর বিভিন্ন সেক্টরের স্টক স্ক্যান করুন।"
+)
+
+# ১. মূল সেক্টর অনুযায়ী জনপ্রিয় স্টকের তালিকা
 SECTOR_STOCKS = {
     "Financial & Banking": [
         "HDFCBANK.NS",
@@ -77,7 +87,7 @@ SECTOR_STOCKS = {
         "JINDALSTEL.NS",
         "NMDC.NS",
     ],
-    "Capital Goods & Infrastructure": [
+    "Capital Goods & Infra": [
         "LT.NS",
         "HAL.NS",
         "BEL.NS",
@@ -107,23 +117,15 @@ SECTOR_STOCKS = {
 # ২. রিটেস্ট ফিল্টার লজিক
 def scan_retest(ticker):
     try:
-        # গত ৬ মাসের ডেইলি ক্যান্ডেল ডাউনলোড
         df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-
         if len(df) < 50:
             return None
 
-        # সাম্প্রতিক ক্লোজ এবং হাই বের করা
         current_close = float(df["Close"].iloc[-1].values[0])
         previous_close = float(df["Close"].iloc[-2].values[0])
-
-        # বিগত ২০ দিনের সর্বোচ্চ রেজিস্ট্যান্স (Recent High)
         recent_high = float(df["High"].iloc[-20:-3].max().values[0])
-
-        # ২০ দিনের Moving Average (Dynamic Support)
         sma_20 = float(df["Close"].rolling(window=20).mean().iloc[-1].values[0])
 
-        # কন্ডিশন ১: সাম্প্রতিক হাই-এর ২% থেকে ৩%-এর মধ্যে রিটেস্ট অথবা ২০ SMA-তে সাপোর্ট
         retest_zone_high = recent_high * 1.02
         retest_zone_low = recent_high * 0.97
 
@@ -131,53 +133,56 @@ def scan_retest(ticker):
             retest_zone_low <= current_close <= retest_zone_high
         )
         is_retesting_sma = (sma_20 * 0.985) <= current_close <= (sma_20 * 1.015)
-
-        # কন্ডিশন ২: আজকের ক্যান্ডেলটি কিছুটা বুলিশ (পূর্বের দিনের চেয়ে উপরে ক্লোজ)
         is_bouncing = current_close > previous_close
 
         if (is_retesting_breakout or is_retesting_sma) and is_bouncing:
             return {
-                "Ticker": ticker.replace(".NS", ""),
-                "Current Price": round(current_close, 2),
-                "Retest Level": round(recent_high, 2),
-                "20 SMA": round(sma_20, 2),
+                "Stock": ticker.replace(".NS", ""),
+                "Current Price (₹)": round(current_close, 2),
+                "Retest Level (₹)": round(recent_high, 2),
+                "20 SMA (₹)": round(sma_20, 2),
             }
     except Exception:
         pass
-
     return None
 
 
-# ৩. মেইন স্ক্যানার এক্সিকিউশন
-print("=" * 60)
-print("     SECTOR-WISE RETEST STOCK SCREENER (NSE)     ")
-print("=" * 60)
+# ৩. স্ক্যানার বাটন
+if st.button("🚀 Scan Stocks Now"):
+    matched_results = []
+    progress_bar = st.progress(0)
+    status_text = st.empty()
 
-matched_results = []
+    total_sectors = len(SECTOR_STOCKS)
 
-for sector, stocks in SECTOR_STOCKS.items():
-    print(f"\nScanning Sector: {sector}...")
+    for idx, (sector, stocks) in enumerate(SECTOR_STOCKS.items()):
+        status_text.text(f"Scanning Sector: {sector}...")
+        for stock in stocks:
+            res = scan_retest(stock)
+            if res:
+                res["Sector"] = sector
+                matched_results.append(res)
 
-    for stock in stocks:
-        res = scan_retest(stock)
-        if res:
-            res["Sector"] = sector
-            matched_results.append(res)
-            print(f"  [+] Match Found: {res['Ticker']} (₹{res['Current Price']})")
+        progress_bar.progress((idx + 1) / total_sectors)
 
-print("\n" + "=" * 60)
-print("                   FINAL RESULT LIST                   ")
-print("=" * 60)
+    status_text.text("Scanning Completed!")
 
-if matched_results:
-    final_df = pd.DataFrame(matched_results)
-    # কলামগুলো সুন্দরভাবে সাজানো
-    final_df = final_df[
-        ["Sector", "Ticker", "Current Price", "Retest Level", "20 SMA"]
-    ]
-    print(final_df.to_string(index=False))
-else:
-    print(
-        "বর্তমানে কোনো সেক্টরের স্টকে উপযুক্ত রিটেস্ট প্যাটার্ন পাওয়া যায়নি।"
+    # রেজাল্ট প্রদর্শন
+    if matched_results:
+        final_df = pd.DataFrame(matched_results)
+        final_df = final_df[
+            [
+                "Sector",
+                "Stock",
+                "Current Price (₹)",
+                "Retest Level (₹)",
+                "20 SMA (₹)",
+            ]
+        ]
+        st.success("ফিল্টারে আসা সম্ভাব্য স্টকগুলোর তালিকা:")
+        st.dataframe(final_df, use_container_width=True)
+    else:
+        st.warning(
+            "বর্তমানে কোনো সেক্টরের স্টকে উপযুক্ত রিটেস্ট প্যাটার্ন পাওয়া যায়নি।"
         )
-    
+        
