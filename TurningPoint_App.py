@@ -25,16 +25,6 @@ SECTOR_STOCKS = {
         "MUTHOOTFIN.NS",
         "INDUSINDBK.NS",
         "BANKBARODA.NS",
-        "PNB.NS",
-        "FEDERALBNK.NS",
-        "IDFCFIRSTB.NS",
-        "AUBANK.NS",
-        "CANBK.NS",
-        "UNIONBANK.NS",
-        "CHOLAFIN.NS",
-        "SHRIRAMFIN.NS",
-        "RECLTD.NS",
-        "PFC.NS",
     ],
     "⛽ 2. Oil, Gas, Energy & Chemicals (79 Stocks)": [
         "RELIANCE.NS",
@@ -151,6 +141,26 @@ selected_sector = st.selectbox(
     "একটি সাব-সেক্টর বেছে নিন:", list(SECTOR_STOCKS.keys())
 )
 
+# টাইমফ্রেম সিলেকশন ড্রপডাউন (আপনার চাহিদা অনুযায়ী)[span_1](start_span)[span_1](end_span)
+timeframe_option = st.selectbox(
+    "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
+    ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
+)
+
+# টাইমফ্রেম অনুযায়ী yfinance ইন্টারভাল সেট করা
+if "1 Day" in timeframe_option:
+    interval_val = "1d"
+    period_val = "6mo"
+elif "4 Hours" in timeframe_option:
+    interval_val = "60m"  # Yahoo Finance ইন্ট্রাডে লিমিটেশনের জন্য
+    period_val = "60d"
+elif "1 Hour" in timeframe_option:
+    interval_val = "60m"
+    period_val = "30d"
+else:
+    interval_val = "15m"
+    period_val = "5d"
+
 st.write("🎯 যে প্রাইস রেঞ্জের স্টক অ্যাপে দেখতে চান তা টিক দিন:")
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -162,10 +172,12 @@ with col3:
 
 
 # স্ক্যান লজিক
-def scan_stock(ticker):
+def scan_stock(ticker, interval, period):
     try:
-        df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-        if len(df) < 50:
+        df = yf.download(
+            ticker, period=period, interval=interval, progress=False
+        )
+        if len(df) < 30:
             return None
 
         current_close = float(df["Close"].iloc[-1].values[0])
@@ -213,7 +225,7 @@ def scan_stock(ticker):
                 "Morning Star" if has_big_buyer else "Bullish Engulfing"
             )
 
-            result_dict = {
+            return {
                 "Stock": ticker.replace(".NS", ""),
                 "LTP": round(current_close, 2),
                 "Price_Tag": price_tag,
@@ -222,7 +234,6 @@ def scan_stock(ticker):
                 "Seller_Pct": seller_pct,
                 "Volume_Ratio": f"{volume_surge_ratio}x Avg Vol",
             }
-            return result_dict
     except Exception:
         pass
     return None
@@ -232,7 +243,7 @@ def scan_stock(ticker):
 if st.button("🔍 স্ক্যান শুরু করুন"):
     stocks_to_scan = SECTOR_STOCKS[selected_sector]
     st.write(
-        f"🏛️ **{selected_sector}** সেকশনে সমস্ত স্টকের প্যাটার্ন স্ক্যান করা হচ্ছে..."
+        f"🏛️ **{selected_sector}** সেকশনে **{timeframe_option}** টাইমফ্রেমে স্ক্যান করা হচ্ছে..."
     )
 
     progress_bar = st.progress(0)
@@ -240,7 +251,7 @@ if st.button("🔍 স্ক্যান শুরু করুন"):
     total_stocks = len(stocks_to_scan)
 
     for i, stock in enumerate(stocks_to_scan):
-        res = scan_stock(stock)
+        res = scan_stock(stock, interval_val, period_val)
         if res:
             matched_results.append(res)
         progress_bar.progress((i + 1) / total_stocks)
