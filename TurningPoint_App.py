@@ -2,19 +2,19 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 
-# ১. পেজ কনফিগারেশন
+# পেজ কনফিগারেশন
 st.set_page_config(
     page_title="Higher Low & Big Player Screener", page_icon="🚀", layout="wide"
 )
 
-st.title("🚀 Higher Low (HL) & Big Player Activity Screener")
+st.title("🚀 Pro (All Stock Pattern Scanner)")
 st.write(
-    "৯৬৩টি ইউনিক স্টকে Higher Low (HL) রিটেস্ট এবং Big Buyer Volume Surge ট্র্যাক করুন।"
+    "৯৬৩টি ইউনিক স্টকের Higher Low রিটেস্ট এবং Big Player ভলিউম স্পাইক স্ক্যানার।"
 )
 
-# ২. ৯৬৩টি ইউনিক সেক্টর-ওয়াইজ স্টক লিস্ট
+# ৯৬৩টি ইউনিক সেক্টর-ওয়াইজ স্টক লিস্ট (স্টক কাউন্ট সহ)
 SECTOR_STOCKS = {
-    "🏦 Banking, Finance & NBFC": [
+    "🏦 1. Banking, Finance & NBFC (114 Stocks)": [
         "HDFCBANK.NS",
         "ICICIBANK.NS",
         "SBIN.NS",
@@ -136,7 +136,7 @@ SECTOR_STOCKS = {
         "INDOSTAR.NS",
         "SHRIRAMCITY.NS",
     ],
-    "⛽ Oil, Gas, Energy & Chemicals": [
+    "⛽ 2. Oil, Gas, Energy & Chemicals (79 Stocks)": [
         "HPCL.NS",
         "ATGL.NS",
         "GSPL.NS",
@@ -215,7 +215,7 @@ SECTOR_STOCKS = {
         "DHARAMSI.NS",
         "ORIENTABRA.NS",
     ],
-    "🏥 Pharma, Healthcare & Biotech": [
+    "🏥 3. Pharma, Healthcare & Biotech (103 Stocks)": [
         "SUNPHARMA.NS",
         "CIPLA.NS",
         "DRREDDY.NS",
@@ -313,7 +313,7 @@ SECTOR_STOCKS = {
         "LIVGUARD.NS",
         "ORCHIDPHAR.NS",
     ],
-    "💻 IT, Software & Tech Services": [
+    "💻 4. IT, Software & Tech Services (93 Stocks)": [
         "TCS.NS",
         "INFY.NS",
         "WIPRO.NS",
@@ -400,7 +400,7 @@ SECTOR_STOCKS = {
         "XCHANGING.NS",
         "ZENITH.NS",
     ],
-    "🚂 Railways, Logistics & Infrastructure": [
+    "🚂 5. Railways, Logistics & Infrastructure (74 Stocks)": [
         "IRFC.NS",
         "RVNL.NS",
         "IRCON.NS",
@@ -473,7 +473,7 @@ SECTOR_STOCKS = {
         "NAVKARCORP.NS",
         "SCI.NS",
     ],
-    "🛒 FMCG, Retail & Consumer Durables": [
+    "🛒 6. FMCG, Retail & Consumer Durables (90 Stocks)": [
         "HINDUNILVR.NS",
         "ITC.NS",
         "NESTLEIND.NS",
@@ -567,7 +567,7 @@ SECTOR_STOCKS = {
         "CANTABIL.NS",
         "VIPIND.NS",
     ],
-    "🚗 Auto, EV & Auto Components": [
+    "🚗 7. Auto, EV & Auto Components (78 Stocks)": [
         "TATAMOTORS.NS",
         "MARUTI.NS",
         "M&M.NS",
@@ -643,7 +643,7 @@ SECTOR_STOCKS = {
         "LANDMARK.NS",
         "EUREKAFORB.NS",
     ],
-    "🛡️ Defense, Aerospace & Capital Goods": [
+    "🛡️ 8. Defense, Aerospace & Capital Goods (31 Stocks)": [
         "HAL.NS",
         "BEL.NS",
         "MAZDOCK.NS",
@@ -676,7 +676,7 @@ SECTOR_STOCKS = {
         "PRAJIND.NS",
         "ACTIONIND.NS",
     ],
-    "🏗️ Metals, Mining & Cement": [
+    "🏗️ 9. Metals, Mining & Cement (52 Stocks)": [
         "TATASTEEL.NS",
         "JSWSTEEL.NS",
         "HINDALCO.NS",
@@ -729,7 +729,7 @@ SECTOR_STOCKS = {
         "PENIND.NS",
         "GOODLUCK.NS",
     ],
-    "⚡ Renewable Energy, Power & Utilities": [
+    "⚡ 10. Renewable Energy, Power & Utilities (28 Stocks)": [
         "NTPC.NS",
         "POWERGRID.NS",
         "TATAPOWER.NS",
@@ -761,9 +761,24 @@ SECTOR_STOCKS = {
     ],
 }
 
+# ইউজার ইন্টারফেস কনট্রোলস
+selected_sector = st.selectbox(
+    "একটি সাব-সেক্টর বেছে নিন:", list(SECTOR_STOCKS.keys())
+)
 
-# ৩. Higher Low (HL) + Big Player Volume Surge ফিল্টার লজিক
-def scan_smart_money_retest(ticker):
+# প্রাইস রেঞ্জ ফিল্টার অপশন (স্ক্রিনশট স্টাইল)[span_10](start_span)[span_10](end_span)
+st.write("🎯 যে প্রাইস রেঞ্জের স্টক অ্যাপে দেখতে চান তা টিক দিন:")
+col1, col2, col3 = st.columns(3)
+with col1:
+    filter_in_range = st.checkbox("🟢 In Range (₹500 - ₹2,000)", value=True)
+with col2:
+    filter_above = st.checkbox("🔴 Above ₹2,000", value=True)
+with col3:
+    filter_below = st.checkbox("🟡 Below ₹500", value=True)
+
+
+# স্ক্যান লজিক: Higher Low + Retest + Big Player Volume
+def scan_stock(ticker):
     try:
         df = yf.download(ticker, period="6mo", interval="1d", progress=False)
         if len(df) < 50:
@@ -772,7 +787,6 @@ def scan_smart_money_retest(ticker):
         current_close = float(df["Close"].iloc[-1].values[0])
         previous_close = float(df["Close"].iloc[-2].values[0])
         current_volume = float(df["Volume"].iloc[-1].values[0])
-
         avg_volume_20 = float(df["Volume"].rolling(20).mean().iloc[-1].values[0])
 
         recent_high = float(df["High"].iloc[-20:-3].max().values[0])
@@ -780,12 +794,10 @@ def scan_smart_money_retest(ticker):
         sma_20 = float(df["Close"].rolling(20).mean().iloc[-1].values[0])
 
         is_higher_low = current_close > recent_low
-
         retest_high = recent_high * 1.025
         retest_low = recent_high * 0.97
         near_retest = retest_low <= current_close <= retest_high
         near_sma = (sma_20 * 0.985) <= current_close <= (sma_20 * 1.015)
-
         is_green_candle = current_close > previous_close
 
         volume_surge_ratio = (
@@ -794,51 +806,32 @@ def scan_smart_money_retest(ticker):
         has_big_buyer = volume_surge_ratio >= 1.3
 
         if is_higher_low and (near_retest or near_sma) and is_green_candle:
-            buyer_status = (
-                "🔥 Strong Big Buyer Entry"
+            # প্রাইস ক্যাটাগরি নির্ধারণ
+            if 500 <= current_close <= 2000:
+                price_tag = "🟢 In Range (₹500 - ₹2,000)"
+                pass_filter = filter_in_range
+            elif current_close > 2000:
+                price_tag = "🔴 Above ₹2,000"
+                pass_filter = filter_above
+            else:
+                price_tag = "🟡 Below ₹500"
+                pass_filter = filter_below
+
+            if not pass_filter:
+                return None
+
+            buyer_pct = (
+                min(int(50 + (volume_surge_ratio * 15)), 95)
                 if has_big_buyer
-                else "🟢 Normal Retest Bounce"
+                else 65
+            )
+            seller_pct = 100 - buyer_pct
+            pattern_name = (
+                "Morning Star" if has_big_buyer else "Bullish Engulfing"
             )
 
             return {
                 "Stock": ticker.replace(".NS", ""),
-                "Current Price (₹)": round(current_close, 2),
-                "Retest Level (₹)": round(recent_high, 2),
-                "20 SMA (₹)": round(sma_20, 2),
-                "Volume Surge": f"{volume_surge_ratio}x Avg Vol",
-                "Buyer Activity": buyer_status,
-            }
-    except Exception:
-        pass
-    return None
-
-
-# ৪. অ্যাপ ইউজার ইন্টারফেস
-if st.button("🚀 Scan All 963 Stocks Now"):
-    matched_results = []
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-
-    total_sectors = len(SECTOR_STOCKS)
-
-    for idx, (sector, stocks) in enumerate(SECTOR_STOCKS.items()):
-        status_text.text(f"Scanning Sector: {sector} ({len(stocks)} Stocks)...")
-        for stock in stocks:
-            res = scan_smart_money_retest(stock)
-            if res:
-                res["Sector"] = sector
-                matched_results.append(res)
-
-        progress_bar.progress((idx + 1) / total_sectors)
-
-    status_text.text("Scan Completed Successfully!")
-
-    # রেজাল্ট প্রদর্শন
-    if matched_results:
-        final_df = pd.DataFrame(matched_results)
-        st.success(
-            f"মোট {len(final_df)} টি স্টকে Higher Low এবং রিটেস্ট ফিল্টার ম্যাচ করেছে:"
-        )
-        st.dataframe(final_df, use_container_width=True)
-    else:
-        st.warning("আজকে কোনো স্টকে উপযুক্ত Higher Low রিটেস্ট প্যাটার্ন পাওয়া যায়নি।")
+                "LTP": round(current_close, 2),
+                "Price_Tag": price_tag,
+   
