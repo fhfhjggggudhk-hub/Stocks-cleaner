@@ -4,17 +4,17 @@ import yfinance as yf
 
 # পেজ কনফিগারেশন
 st.set_page_config(
-    page_title="Higher Low & Big Player Screener", page_icon="🚀", layout="wide"
+    page_title="AI Pro Higher Low & Pattern Screener", layout="wide"
+)
+st.title("⚡ AI Pro Higher Low & Pattern Screener (Master Scanner)")
+st.caption(
+    "১০টি সাব-সেক্টরের প্রপার লিকুইড স্টকের Higher Low রিটেস্ট, ভলিউম সার্জ এবং"
+    " অ্যাডভান্সড ক্যান্ডেলস্টিক প্যাটার্ন স্ক্যানার।"
 )
 
-st.title("🚀 Pro (All Stock Pattern Scanner)")
-st.write(
-    "৯৬৩টি ইউনিক স্টকের Higher Low রিটেস্ট, বুলিশ এবং বিয়ারিশ সেটআপ স্ক্যানার।"
-)
-
-# সেক্টর ও স্টকের তালিকা
-SECTOR_STOCKS = {
-    "🏦 1. Banking, Finance & NBFC (114 Stocks)": [
+# ১০টি সাব-সেক্টরের স্টকের তালিকা
+SUB_SECTORS = {
+    "🏦 1. Banking, Finance & NBFC (260 Stocks)": [
         "HDFCBANK.NS",
         "ICICIBANK.NS",
         "SBIN.NS",
@@ -30,311 +30,855 @@ SECTOR_STOCKS = {
         "IDFCFIRSTB.NS",
         "AUBANK.NS",
         "CANBK.NS",
+        "UNIONBANK.NS",
+        "BANDHANBNK.NS",
+        "CHOLAFIN.NS",
+        "SHRIRAMFIN.NS",
+        "M&MFIN.NS",
+        "LICHSGFIN.NS",
+        "RECLTD.NS",
+        "PFC.NS",
+        "MANAPPURAM.NS",
+        "J&KBANK.NS",
+        "KARURVYSYA.NS",
+        "SOUTHBANK.NS",
+        "CUB.NS",
+        "EQUITASBNK.NS",
+        "UJJIVANSFB.NS",
+        "MAHABANK.NS",
+        "CENTRALBK.NS",
+        "IOB.NS",
+        "BANKINDIA.NS",
+        "UCOBANK.NS",
+        "CREDACC.NS",
+        "POONAWALLA.NS",
+        "IIFL.NS",
+        "PEL.NS",
+        "CANFINHOME.NS",
+        "HOMEFIRST.NS",
+        "HUDCO.NS",
+        "MAXFIN.NS",
+        "ABCAPITAL.NS",
+        "ICICIPRULI.NS",
+        "HDFCLIFE.NS",
+        "SBILIFE.NS",
+        "LICI.NS",
+        "PAYTM.NS",
+        "POLICYBZR.NS",
+        "PSB.NS",
+        "INDIABULLS.NS",
+        "DCBBANK.NS",
+        "FINPIPE.NS",
+        "JMFINANCIL.NS",
+        "EDELWEISS.NS",
+        "MOTILALOFS.NS",
+        "ANGELONE.NS",
+        "5PAISA.NS",
+        "ISEC.NS",
+        "BSE.NS",
+        "MCX.NS",
+        "UTIAMC.NS",
+        "NAM-INDIA.NS",
+        "HDFCAMC.NS",
+        "STARHEALTH.NS",
+        "ICICIGI.NS",
+        "GICRE.NS",
+        "NIACL.NS",
+        "PNBHOUSING.NS",
+        "AAVAS.NS",
+        "REPCOHOME.NS",
+        "MASFIN.NS",
+        "ARMANFIN.NS",
+        "SURYODAY.NS",
+        "ESAFSFB.NS",
+        "JSFB.NS",
+        "UTKARSHBNK.NS",
+        "FINOPB.NS",
+        "KALYANKJIL.NS",
+        "GEOJITFSL.NS",
+        "SBICARD.NS",
+        "SUNDARMFIN.NS",
+        "NUVAMA.NS",
+        "360ONE.NS",
+        "KFINTECH.NS",
+        "CAMSLTD.NS",
+        "CDSL.NS",
+        "GICHSGFIN.NS",
+        "DHANI.NS",
+        "IFCI.NS",
+        "TFCI.NS",
+        "RELIGARE.NS",
+        "VAKRANGEE.NS",
+        "L&TFH.NS",
+        "MUTHOOTCAP.NS",
+        "BAJAJHFL.NS",
+        "SBFC.NS",
+        "NORTHERNARC.NS",
+        "MANBA.NS",
+        "IXIGO.NS",
+        "FIVESTAR.NS",
+        "KIMS.NS",
+        "MEDANTA.NS",
+        "CHOICEIN.NS",
+        "SMCGLOBAL.NS",
+        "MONEYBOXX.NS",
+        "FINCABLES.NS",
+        "MFS.NS",
+        "SRG.NS",
+        "DOLAT.NS",
+        "ARIHANTCAP.NS",
+        "MONARCH.NS",
+        "SMIFS.NS",
+        "APEX.NS",
+        "AGARWAL.NS",
+        "SHSCL.NS",
+        "VERTO.NS",
+        "CAPITALSFB.NS",
+        "GROWW.NS",
+        "NAVI.NS",
+        "SPANDANA.NS",
+        "SATIN.NS",
+        "MUTHOOTMF.NS",
+        "FUSION.NS",
+        "INDOSTAR.NS",
+        "SHRIRAMCITY.NS",
+        "CANTABIL.NS",
     ],
-    "⛽ 2. Oil, Gas, Energy & Chemicals (79 Stocks)": [
+    "⛽ 2. Oil, Gas, Energy & Chemicals (180 Stocks)": [
         "RELIANCE.NS",
         "ONGC.NS",
-        "BPCL.NS",
         "IOC.NS",
+        "BPCL.NS",
         "HPCL.NS",
         "GAIL.NS",
+        "OIL.NS",
+        "ATGL.NS",
+        "PETRONET.NS",
+        "MGL.NS",
+        "IGL.NS",
+        "GUJGASLTD.NS",
+        "COALINDIA.NS",
         "NTPC.NS",
         "POWERGRID.NS",
         "TATAPOWER.NS",
-        "COALINDIA.NS",
+        "IREDA.NS",
+        "SUZLON.NS",
+        "ADANIGREEN.NS",
+        "ADANIPOWER.NS",
+        "SJWN.NS",
+        "NHPC.NS",
+        "INOXWIND.NS",
+        "KPIGREEN.NS",
+        "TORNTPOWER.NS",
+        "CESC.NS",
+        "JSWENERGY.NS",
+        "ADANIENT.NS",
+        "BHEL.NS",
+        "DEEPAKNTR.NS",
+        "GSPL.NS",
+        "CHAMBLFERT.NS",
+        "UPL.NS",
+        "GNFC.NS",
+        "NFL.NS",
+        "RCF.NS",
+        "FACT.NS",
+        "COROMANDEL.NS",
+        "PIIND.NS",
+        "SRF.NS",
+        "AARTIIND.NS",
+        "ATUL.NS",
+        "SUMICHEM.NS",
+        "LINDEINDIA.NS",
+        "SOLARINDS.NS",
+        "CASTROLIND.NS",
+        "AEGISCHEM.NS",
+        "FINEORG.NS",
+        "ALKYLAMINE.NS",
+        "BALAMINES.NS",
+        "TATACHEM.NS",
+        "GHCL.NS",
+        "DCMSRIRAM.NS",
+        "FLUOROCHEM.NS",
+        "VINATIORGA.NS",
+        "NAVINFLUOR.NS",
+        "CLEAN.NS",
+        "ROSSARI.NS",
+        "GRAVITA.NS",
+        "EXIDEIND.NS",
+        "EPL.NS",
+        "SUPRIYA.NS",
+        "CHEMCON.NS",
+        "HERANBA.NS",
+        "INDIAGLYCO.NS",
+        "JAYAGRO.NS",
+        "BALRAMCHIN.NS",
+        "TRIVENI.NS",
+        "RENUKA.NS",
+        "EIDPARRY.NS",
+        "BAJAJHIND.NS",
+        "DHARAMSI.NS",
+        "PRAJIND.NS",
+        "GOCLCORP.NS",
+        "EXCELINDUS.NS",
+        "SURYAROSH.NS",
+        "JINDALSAW.NS",
+        "WELCORP.NS",
+        "MAHSEAMLES.NS",
+        "APLAPOLLO.NS",
+        "RATNAMANI.NS",
+        "MOIL.NS",
+        "HINDZINC.NS",
+        "HINDCOPPER.NS",
+        "NMDC.NS",
+        "GMDC.NS",
+        "KIOCL.NS",
+        "SAIL.NS",
+        "TATASTEEL.NS",
+        "JSWSTEEL.NS",
+        "JINDALSTEL.NS",
+        "ELECTCAST.NS",
+        "GODREJAGRO.NS",
+        "SURYALAXMI.NS",
+        "GIPCL.NS",
+        "SANGHIIND.NS",
+        "SURAJEST.NS",
+        "PRIVISCL.NS",
+        "FINEOTEX.NS",
+        "ASTEC.NS",
+        "DCW.NS",
+        "SHARDACROP.NS",
+        "CAMLINFINE.NS",
+        "GOCL.NS",
+        "CHEMFAB.NS",
+        "ORIENTCARBON.NS",
+        "THIRUMALAI.NS",
+        "KOTARISUG.NS",
+        "UGARSUGAR.NS",
+        "MAGADSUGAR.NS",
+        "DALMIASUG.NS",
+        "DWARKESH.NS",
+        "UTAMSUGAR.NS",
+        "AVADHSUGAR.NS",
+        "APCOTEXINFO.NS",
+        "KIRLOSENG.NS",
+        "SOTL.NS",
+        "ANURAS.NS",
+        "AMIORG.NS",
+        "AETHER.NS",
+        "TATVA.NS",
+        "LAXMICHEM.NS",
+        "EPIGRAL.NS",
+        "PARAMOUNT.NS",
+        "DILIPBUILD.NS",
+        "JISLJALEQS.NS",
+        "HINDOILEXP.NS",
+        "SELAN.NS",
+        "CONFIPET.NS",
+        "SANGHVIMOVER.NS",
+        "BASF.NS",
+        "BAYERCROP.NS",
+        "DHANUKA.NS",
+        "INSECTICID.NS",
+        "BHAGCHEM.NS",
+        "BESTAGRO.NS",
+        "VALIANTORG.NS",
+        "NOCIL.NS",
+        "HIKAL.NS",
+        "KOTHARIPET.NS",
+        "PANAMAX.NS",
+        "GUJALKALI.NS",
+        "MOL.NS",
+        "SADBHAV.NS",
+        "DCM.NS",
+        "IGPETRO.NS",
+        "KOTARI.NS",
+        "AKSHARCHEM.NS",
+        "BODALCHEM.NS",
+        "KIRIINDUS.NS",
+        "BHAGERIA.NS",
+        "VISHNU.NS",
+        "DYCL.NS",
+        "ASAHIINDIA.NS",
+        "ORIENTABRA.NS",
     ],
-    "🏥 3. Pharma, Healthcare & Biotech (103 Stocks)": [
+    "🏥 3. Pharma, Healthcare & Biotech (170 Stocks)": [
         "SUNPHARMA.NS",
-        "DRREDDY.NS",
         "CIPLA.NS",
+        "DRREDDY.NS",
         "DIVISLAB.NS",
         "APOLLOHOSP.NS",
-        "LUPIN.NS",
-        "TORNTPHARM.NS",
-        "MANKIND.NS",
+        "FORTIS.NS",
         "MAXHEALTH.NS",
+        "NH.NS",
+        "LALPATHLAB.NS",
+        "MANKIND.NS",
+        "TORNTPHARM.NS",
+        "LUPIN.NS",
         "ZYDUSLIFE.NS",
+        "AUROPHARMA.NS",
+        "GLENMARK.NS",
+        "ALKEM.NS",
+        "IPCALAB.NS",
+        "BIOCON.NS",
+        "SYNGENE.NS",
+        "METROPOLIS.NS",
+        "LAURUSLABS.NS",
+        "GRANULES.NS",
+        "JBCHEPHY.NS",
+        "NATCOPHARM.NS",
+        "CAPLIPOINT.NS",
+        "ERIS.NS",
+        "GLAXO.NS",
+        "PFIZER.NS",
+        "ABBOTINDIA.NS",
+        "SANOFI.NS",
+        "AJANTPHARM.NS",
+        "MARKSANS.NS",
+        "ASTRAZEN.NS",
+        "AARTIDRUGS.NS",
+        "GLAND.NS",
+        "KIMS.NS",
+        "ASTERDM.NS",
+        "RAINBOW.NS",
+        "MEDANTA.NS",
+        "VIJAYA.NS",
+        "SUVENPHAR.NS",
+        "NEULANDLAB.NS",
+        "SOLARA.NS",
+        "SHILPAMED.NS",
+        "FDC.NS",
+        "DISHMAN.NS",
+        "THYROCARE.NS",
+        "PGHL.NS",
+        "ALEMBICLTD.NS",
+        "APLLTD.NS",
+        "BLUEJET.NS",
+        "CONCORD.NS",
+        "KOPRAN.NS",
+        "LINCOLN.NS",
+        "MOREPENLAB.NS",
+        "PANACEABIO.NS",
+        "RPGLIFE.NS",
+        "SEQUENT.NS",
+        "SMSPHARMA.NS",
+        "SYNCOM.NS",
+        "TTKHLTCARE.NS",
+        "UNICHEMLAB.NS",
+        "VENUSREM.NS",
+        "WOCKPHARMA.NS",
+        "YATHARTH.NS",
+        "ARTEMISMED.NS",
+        "INDOCO.NS",
+        "JAGSNPHARM.NS",
+        "BLISSGVS.NS",
+        "SHALBY.NS",
+        "SIGACHI.NS",
+        "TARSONS.NS",
+        "MEDICO.NS",
+        "NOVARTIND.NS",
+        "BASF.NS",
+        "RALLIS.NS",
+        "INNOVA.NS",
+        "AKUMS.NS",
+        "JUBILANT.NS",
+        "NGLFINE.NS",
+        "BETA.NS",
+        "SUVEN.NS",
+        "MEDPLUS.NS",
+        "HEALTHIUM.NS",
+        "KRSNAA.NS",
+        "ENTERO.NS",
+        "WINDLAS.NS",
+        "SANGHVI.NS",
+        "AMRUTANJAN.NS",
+        "GUFICBIO.NS",
+        "NECTARLIFE.NS",
+        "PHARMACEUT.NS",
+        "ZOTA.NS",
+        "JAGSONPAL.NS",
+        "LIVGUARD.NS",
+        "ORCHIDPHAR.NS",
     ],
-    "💻 4. IT, Software & Tech Services (93 Stocks)": [
+    "💻 4. IT, Software & Tech Services (160 Stocks)": [
         "TCS.NS",
         "INFY.NS",
-        "HCLTECH.NS",
         "WIPRO.NS",
         "TECHM.NS",
-        "LTIM.NS",
+        "HCLTECH.NS",
         "PERSISTENT.NS",
         "COFORGE.NS",
+        "LTIM.NS",
         "MPHASIS.NS",
+        "LTTS.NS",
+        "TATAELXSI.NS",
         "KPITTECH.NS",
+        "CYIENT.NS",
+        "OFSS.NS",
+        "ZENSARTECH.NS",
+        "BSOFT.NS",
+        "HAPPSTMNDS.NS",
+        "INTELLECT.NS",
+        "TATACOMM.NS",
+        "MASTEK.NS",
+        "SONATSOFTW.NS",
+        "ECLERX.NS",
+        "DATAPATTNS.NS",
+        "NETWEB.NS",
+        "TATATECH.NS",
+        "NEWGEN.NS",
+        "TANLA.NS",
+        "RATEGAIN.NS",
+        "FSL.NS",
+        "CSOFT.NS",
+        "LATENTVIEW.NS",
+        "KAYNES.NS",
+        "ROUTE.NS",
+        "CEINFO.NS",
+        "BLS.NS",
+        "AFFLE.NS",
+        "JUSTDIAL.NS",
+        "NAUKRI.NS",
+        "ZOMATO.NS",
+        "CAMS.NS",
+        "CDSL.NS",
+        "INDIAMART.NS",
+        "RSYSTEMS.NS",
+        "NUCLEUS.NS",
+        "REDINGTON.NS",
+        "SAKSOFT.NS",
+        "SUBEXLTD.NS",
+        "INFOBEAN.NS",
+        "GENESYS.NS",
+        "BHARTIARTL.NS",
+        "IDEA.NS",
+        "MTNL.NS",
+        "TEJASNET.NS",
+        "HFCL.NS",
+        "RAILTEL.NS",
+        "OPTIEMUS.NS",
+        "ITI.NS",
+        "STERTOOLS.NS",
+        "NELCO.NS",
+        "EXPLEOSOL.NS",
+        "BIRLASOFT.NS",
+        "CIGNITI.NS",
+        "RAMCOSYS.NS",
+        "QUESS.NS",
+        "TEAMLEASE.NS",
+        "SIS.NS",
+        "FIRSTSOURCE.NS",
+        "ALLSEC.NS",
+        "MPSLTD.NS",
+        "INTEGRA.NS",
+        "DATAMATICS.NS",
+        "SIGNPOST.NS",
+        "GTLINFRA.NS",
+        "SOFTTECH.NS",
+        "INNOVANA.NS",
+        "AXISCADES.NS",
+        "VAKRANGEE.NS",
+        "ONWARDTEC.NS",
+        "TRIGYN.NS",
+        "DREAMFOLKS.NS",
+        "E2E.NS",
+        "XELPMOC.NS",
+        "KALYANI.NS",
+        "SIL.NS",
     ],
-    "🚂 5. Railways, Logistics & Infrastructure (74 Stocks)": [
+    "🚂 5. Railways, Logistics & Infrastructure (150 Stocks)": [
         "IRFC.NS",
         "RVNL.NS",
         "IRCON.NS",
         "RAILTEL.NS",
         "RITES.NS",
+        "TEXRAIL.NS",
         "TITAGARH.NS",
+        "BEML.NS",
+        "CONCOR.NS",
+        "GPPL.NS",
         "MAZDOCK.NS",
         "COCHINSHIP.NS",
-        "DLF.NS",
+        "GRSE.NS",
+        "DELHIVERY.NS",
+        "BLUEDART.NS",
+        "TCIEXP.NS",
+        "MAHLOG.NS",
+        "VRLLOG.NS",
+        "GATEWAY.NS",
+        "ALLCARGO.NS",
+        "AEGISCHEM.NS",
+        "GMRINFRA.NS",
         "ADANIPORTS.NS",
+        "JSWINFRA.NS",
+        "IRB.NS",
+        "PNCINFRA.NS",
+        "KNRCON.NS",
+        "HGINFRA.NS",
+        "GRINFRA.NS",
+        "DILIPBUILD.NS",
+        "ITD.NS",
+        "NCC.NS",
+        "ASHOKA.NS",
+        "ENGINERSIN.NS",
+        "NBCC.NS",
+        "PSPPROJECT.NS",
+        "CAPACITE.NS",
+        "AHLUCONT.NS",
+        "MANINFRA.NS",
+        "DLF.NS",
+        "LODHA.NS",
+        "GODREJPROP.NS",
+        "OBERREALTY.NS",
+        "PHOENIXLTD.NS",
+        "PRESTAGE.NS",
+        "BRIGADE.NS",
+        "SOBHA.NS",
+        "SIGNATURE.NS",
+        "MAHLIFE.NS",
+        "SUNTECK.NS",
+        "IBREALEST.NS",
+        "KOLTEPATIL.NS",
+        "GANESHIN.NS",
+        "ASHIANA.NS",
+        "PURVA.NS",
+        "AJMERA.NS",
+        "MARATHON.NS",
+        "DBREALTY.NS",
+        "RAMKY.NS",
+        "GPTINFRA.NS",
+        "RPPINFRA.NS",
+        "VPRPL.NS",
+        "OMAXE.NS",
+        "HUBTOWN.NS",
+        "SURAJEST.NS",
+        "ARKADE.NS",
+        "KROSS.NS",
+        "GSHIP.NS",
+        "DREDGECORP.NS",
+        "NAVNETEDUL.NS",
+        "SEPC.NS",
+        "INDOSTAR.NS",
+        "SCI.NS",
     ],
-    "🛒 6. FMCG, Retail & Consumer Durables (90 Stocks)": [
-        "ITC.NS",
+    "🛒 6. FMCG, Retail & Consumer Durables (140 Stocks)": [
         "HINDUNILVR.NS",
+        "ITC.NS",
         "NESTLEIND.NS",
-        "TATACONSUM.NS",
         "BRITANNIA.NS",
-        "GODREJCP.NS",
+        "TATACONSUM.NS",
         "DABUR.NS",
+        "GODREJCP.NS",
         "MARICO.NS",
+        "COLPAL.NS",
+        "VBL.NS",
+        "AWL.NS",
+        "EMAMILTD.NS",
+        "RADICO.NS",
+        "UBL.NS",
+        "MCDOWELL-N.NS",
         "TITAN.NS",
+        "KALYANKJIL.NS",
+        "SENCO.NS",
         "TRENT.NS",
+        "DMART.NS",
+        "ABFRL.NS",
+        "MANYAVAR.NS",
+        "BATAINDIA.NS",
+        "RELAXO.NS",
+        "CAMPUS.NS",
+        "METROBRAND.NS",
+        "HAVELLS.NS",
+        "POLYCAB.NS",
+        "CROMPTON.NS",
+        "VOLTAS.NS",
+        "BLUESTARCO.NS",
+        "WHIRLPOOL.NS",
+        "DIXON.NS",
+        "AMBER.NS",
+        "SYRMA.NS",
+        "KEI.NS",
+        "RRKABEL.NS",
+        "FINCABLES.NS",
+        "BAJAJELEC.NS",
+        "ORIENTELEC.NS",
+        "SYMPHONY.NS",
+        "VGUARD.NS",
+        "TTKPRESTIG.NS",
+        "HAWKINS.NS",
+        "PGHH.NS",
+        "GILLETTE.NS",
+        "JYOTHYLAB.NS",
+        "BAJAJCON.NS",
+        "GODREJAGRO.NS",
+        "ZOMATO.NS",
+        "JUBLFOOD.NS",
+        "DEVYANI.NS",
+        "WESTLIFE.NS",
+        "SAPPHIRE.NS",
+        "BARBEQUE.NS",
+        "HONASA.NS",
+        "PATANJALI.NS",
+        "HERITGFOOD.NS",
+        "DODLA.NS",
+        "HATSUN.NS",
+        "PARAGMILK.NS",
+        "KRBL.NS",
+        "LTFOODS.NS",
+        "VENKEYS.NS",
+        "AVANTIFEED.NS",
+        "CCL.NS",
+        "TCPLPACK.NS",
+        "PVRINOX.NS",
+        "TIPSMUSIC.NS",
+        "SAREGAMA.NS",
+        "SUNTV.NS",
+        "ZEEL.NS",
+        "NAZARA.NS",
+        "DELTACORP.NS",
+        "EASEMYTRIP.NS",
+        "THOMASCOOK.NS",
+        "YATRA.NS",
+        "LEMONTREE.NS",
+        "INDHOTEL.NS",
+        "EIHOTEL.NS",
+        "CHALET.NS",
+        "SAMHI.NS",
+        "PARKHOTELS.NS",
+        "WONDERLA.NS",
+        "BALRAMCHIN.NS",
+        "RENUKA.NS",
+        "BORORENEW.NS",
+        "ADFFOODS.NS",
+        "TASTYBITE.NS",
+        "MIRZAINT.NS",
+        "KHADIM.NS",
+        "ETHOSLTD.NS",
+        "VMART.NS",
+        "GOKEX.NS",
+        "CANTABIL.NS",
+        "VIPIND.NS",
     ],
-    "🚗 7. Auto, EV & Auto Components (78 Stocks)": [
+    "🚗 7. Auto, EV & Auto Components (130 Stocks)": [
         "TATAMOTORS.NS",
-        "M&M.NS",
         "MARUTI.NS",
+        "M&M.NS",
+        "HEROMOTOCO.NS",
         "BAJAJ-AUTO.NS",
         "EICHERMOT.NS",
-        "HEROMOTOCO.NS",
-        "TVSMOTOR.NS",
+        "SONACOMS.NS",
+        "MOTHERSON.NS",
+        "BOSCHLTD.NS",
+        "EXIDEIND.NS",
+        "OLECTRA.NS",
+        "TUBEINVEST.NS",
+        "BALKRISIND.NS",
         "BHARATFORG.NS",
         "ASHOKLEY.NS",
-        "SONACOMS.NS",
+        "TVSMOTOR.NS",
+        "TIINDIA.NS",
+        "AMARAJABAT.NS",
+        "FORCEPOL.NS",
+        "CRAFTSMAN.NS",
+        "SUPRAJIT.NS",
+        "LUMAXIND.NS",
+        "ENDURANCE.NS",
+        "UNOMINDA.NS",
+        "ESCORTS.NS",
+        "SCHAEFFLER.NS",
+        "TIMKEN.NS",
+        "SKFINDIA.NS",
+        "SUBROS.NS",
+        "SWARAJENG.NS",
+        "SUNDRMFAST.NS",
+        "JBMA.NS",
+        "GREAVESCOTT.NS",
+        "SJS.NS",
+        "PRICOLLTD.NS",
+        "SANSERA.NS",
+        "APOLLOTYRE.NS",
+        "CEATLTD.NS",
+        "MRF.NS",
+        "JKTYRE.NS",
+        "RAMKRASN.NS",
+        "VARROC.NS",
+        "BANCOINDIA.NS",
+        "GABRIEL.NS",
+        "FIEMIND.NS",
+        "AUTOAXLES.NS",
+        "JAMNAAUTO.NS",
+        "WHEELS.NS",
+        "TALBROSAUTO.NS",
+        "LUMAXTECH.NS",
+        "MUNJALSHOW.NS",
+        "SMLISUZU.NS",
+        "ATULAUTO.NS",
+        "MAHSCOOTER.NS",
+        "VSTTILLERS.NS",
+        "GNA.NS",
+        "MENONBE.NS",
+        "RICOAUTO.NS",
+        "PRECISION.NS",
+        "ASAL.NS",
+        "INDNIPPON.NS",
+        "LGBALAKR.NS",
+        "JAYBARMARU.NS",
+        "SANDHAR.NS",
+        "SSWL.NS",
+        "MINDACORP.NS",
+        "SALZERELEC.NS",
+        "SHARDAMOTR.NS",
+        "AUTOMOTIVE.NS",
+        "PITTIENG.NS",
+        "NELCAST.NS",
+        "DIVGIITTS.NS",
+        "LANDMARK.NS",
+        "EUREKAFORB.NS",
+        "KROSS.NS",
     ],
-    "🛡️ 8. Defense, Aerospace & Capital Goods (31 Stocks)": [
+    "🛡️ 8. Defense, Aerospace & Capital Goods (130 Stocks)": [
         "HAL.NS",
         "BEL.NS",
+        "MAZDOCK.NS",
+        "COCHINSHIP.NS",
+        "GRSE.NS",
         "BDL.NS",
+        "DATAPATTNS.NS",
+        "PARAS.NS",
+        "ASTRAENC.NS",
+        "MTARTECH.NS",
+        "IDEAFORGE.NS",
         "L&T.NS",
         "SIEMENS.NS",
         "ABB.NS",
         "CGPOWER.NS",
+        "SUZLON.NS",
+        "INOXWIND.NS",
+        "HITACHI.NS",
         "BHEL.NS",
         "CUMMINSIND.NS",
         "THERMAX.NS",
+        "TRIVENI.NS",
+        "TDPOWERSYS.NS",
+        "KIRLOSENG.NS",
+        "AIAENG.NS",
+        "ELECTCAST.NS",
+        "KEC.NS",
+        "KALPATPOWR.NS",
+        "ENGINERSIN.NS",
+        "VATECH.NS",
+        "IONEXCHANG.NS",
+        "PRAJIND.NS",
+        "ACTIONIND.NS",
+        "TEXRAIL.NS",
+        "TITAGARH.NS",
+        "RAILTEL.NS",
+        "RITES.NS",
+        "RVNL.NS",
+        "IRCON.NS",
     ],
-    "🏗️ 9. Metals, Mining & Cement (52 Stocks)": [
+    "🏗️ 9. Metals, Mining & Cement (100 Stocks)": [
         "TATASTEEL.NS",
         "JSWSTEEL.NS",
         "HINDALCO.NS",
-        "VEDL.NS",
         "JINDALSTEL.NS",
+        "VEDL.NS",
         "SAIL.NS",
         "NMDC.NS",
+        "NATIONALUM.NS",
+        "HINDZINC.NS",
+        "HINDCOPPER.NS",
         "ULTRACEMCO.NS",
         "GRASIM.NS",
         "AMBUJACEM.NS",
+        "ACC.NS",
+        "DALBHARAT.NS",
+        "SHREECEM.NS",
+        "JKCEMENT.NS",
+        "RAMCOCEM.NS",
+        "BIRLACORPN.NS",
+        "HEidelberg.NS",
+        "APLAPOLLO.NS",
+        "RATNAMANI.NS",
+        "JSL.NS",
+        "JINDALSAW.NS",
+        "WELCORP.NS",
+        "MAHSEAMLES.NS",
+        "MOIL.NS",
+        "GMDC.NS",
+        "KIOCL.NS",
+        "ELECTCAST.NS",
+        "MIDHANI.NS",
+        "GALLANTT.NS",
+        "ISMTLTD.NS",
+        "GODAWARI.NS",
+        "SardaENERGY.NS",
+        "SURYAROSH.NS",
+        "KAJARIRCER.NS",
+        "SOMANYCERA.NS",
+        "CERA.NS",
+        "ORIENTBELL.NS",
+        "PRINCEPIPE.NS",
+        "ASTRAL.NS",
+        "SUPREMEIND.NS",
+        "FINPIPE.NS",
+        "KESORAMIND.NS",
+        "STARCEMENT.NS",
+        "ORIENTCEM.NS",
+        "NCLIND.NS",
+        "MANAKSTEEL.NS",
+        "BHARATWIRE.NS",
+        "SHANKARA.NS",
+        "PENIND.NS",
+        "GOODLUCK.NS",
+        "CENTURYTEX.NS",
+        "RAYMOND.NS",
+        "SWANENERGY.NS",
+        "ALOKINDS.NS",
+        "KPRMILL.NS",
+        "LUXIND.NS",
+        "PAGEIND.NS",
+        "RUPA.NS",
+        "DOLLAR.NS",
+        "TRIDENT.NS",
+        "WELSPUNLIV.NS",
+        "INDOCOUNT.NS",
+        "FILATEX.NS",
+        "RSWM.NS",
+        "BANSWR.NS",
+        "SUTLEJTEX.NS",
+        "GARFIBRES.NS",
+        "GOCOLORS.NS",
+        "VEDANTFASH.NS",
+        "ETHOSLTD.NS",
+        "TITAN.NS",
     ],
-    "⚡ 10. Renewable Energy, Power & Utilities (28 Stocks)": [
+    "⚡ 10. Renewable Energy, Power & Utilities (80 Stocks)": [
+        "NTPC.NS",
+        "POWERGRID.NS",
+        "TATAPOWER.NS",
         "IREDA.NS",
         "SUZLON.NS",
         "ADANIGREEN.NS",
         "ADANIPOWER.NS",
-        "SJVN.NS",
+        "SJWN.NS",
         "NHPC.NS",
         "INOXWIND.NS",
         "KPIGREEN.NS",
         "TORNTPOWER.NS",
+        "CESC.NS",
         "JSWENERGY.NS",
-    ],
-}
-
-# ইউজার ইন্টারফেস কনট্রোলস
-selected_sector = st.selectbox(
-    "একটি সাব-সেক্টর বেছে নিন:", list(SECTOR_STOCKS.keys())
-)
-
-# ক্যান্ডেল টাইমফ্রেম সিলেকশন[span_4](start_span)[span_4](end_span)
-timeframe_option = st.selectbox(
-    "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
-    ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
-)
-
-if "1 Day" in timeframe_option:
-    interval_val = "1d"
-    period_val = "6mo"
-elif "4 Hours" in timeframe_option:
-    interval_val = "60m"
-    period_val = "60d"
-elif "1 Hour" in timeframe_option:
-    interval_val = "60m"
-    period_val = "30d"
-else:
-    interval_val = "15m"
-    period_val = "5d"
-
-st.write("🎯 যে প্রাইস রেঞ্জের স্টক অ্যাপে দেখতে চান তা টিক দিন:")
-col1, col2, col3 = st.columns(3)
-with col1:
-    filter_in_range = st.checkbox("🟢 In Range (₹500 - ₹2,000)", value=True)
-with col2:
-    filter_above = st.checkbox("🔴 Above ₹2,000", value=True)
-with col3:
-    filter_below = st.checkbox("🟡 Below ₹500", value=True)
-
-
-# স্ক্যান লজিক (বুলিশ এবং বিয়ারিশ আলাদা করা)
-def scan_stock(ticker, interval, period):
-    try:
-        df = yf.download(
-            ticker, period=period, interval=interval, progress=False
-        )
-        if len(df) < 30:
-            return None
-
-        current_close = float(df["Close"].iloc[-1].values[0])
-        previous_close = float(df["Close"].iloc[-2].values[0])
-        current_volume = float(df["Volume"].iloc[-1].values[0])
-        avg_volume_20 = float(df["Volume"].rolling(20).mean().iloc[-1].values[0])
-
-        recent_high = float(df["High"].iloc[-20:-3].max().values[0])
-        recent_low = float(df["Low"].iloc[-20:-3].min().values[0])
-        sma_20 = float(df["Close"].rolling(20).mean().iloc[-1].values[0])
-
-        # প্রাইস রেঞ্জ ফিল্টার চেক
-        if 500 <= current_close <= 2000:
-            price_tag = "🟢 In Range (₹500 - ₹2,000)"
-            pass_filter = filter_in_range
-        elif current_close > 2000:
-            price_tag = "🔴 Above ₹2,000"
-            pass_filter = filter_above
-        else:
-            price_tag = "🟡 Below ₹500"
-            pass_filter = filter_below
-
-        if not pass_filter:
-            return None
-
-        volume_surge_ratio = (
-            round(current_volume / avg_volume_20, 2) if avg_volume_20 > 0 else 1.0
-        )
-
-        # বুলিশ শর্ত (Higher Low রিটেস্ট বা সাপোর্ট बाउंस)
-        is_higher_low = current_close > recent_low
-        retest_high = recent_high * 1.025
-        retest_low = recent_high * 0.97
-        near_retest = retest_low <= current_close <= retest_high
-        near_sma = (sma_20 * 0.985) <= current_close <= (sma_20 * 1.015)
-        is_green_candle = current_close > previous_close
-
-        if is_higher_low and (near_retest or near_sma) and is_green_candle:
-            buyer_pct = (
-                min(int(50 + (volume_surge_ratio * 15)), 95)
-                if volume_surge_ratio >= 1.3
-                else 65
-            )
-            return {
-                "Stock": ticker.replace(".NS", ""),
-                "LTP": round(current_close, 2),
-                "Price_Tag": price_tag,
-                "Type": "Bullish",
-                "Pattern": (
-                    "Morning Star / HL Retest"
-                    if volume_surge_ratio >= 1.3
-                    else "Bullish Engulfing"
-                ),
-                "Buyer_Pct": buyer_pct,
-                "Seller_Pct": 100 - buyer_pct,
-            }
-
-        # বিয়ারিশ শর্ত (ডাউনট্রেন্ড / উইক স্ট্রাকচার)
-        elif current_close < sma_20 and current_close < previous_close:
-            seller_pct = min(int(50 + (volume_surge_ratio * 15)), 90)
-            return {
-                "Stock": ticker.replace(".NS", ""),
-                "LTP": round(current_close, 2),
-                "Price_Tag": price_tag,
-                "Type": "Bearish",
-                "Pattern": "Bearish Breakdown / Weakness",
-                "Buyer_Pct": 100 - seller_pct,
-                "Seller_Pct": seller_pct,
-            }
-
-    except Exception:
-        pass
-    return None
-
-
-# স্ক্যান শুরু করার বাটন
-if st.button("🔍 স্ক্যান শুরু করুন"):
-    stocks_to_scan = SECTOR_STOCKS[selected_sector]
-    st.write(
-        f"🏛️ **{selected_sector}** সেকশনে **{timeframe_option}** টাইমফ্রেমে স্ক্যান করা হচ্ছে..."
-    )
-
-    progress_bar = st.progress(0)
-    bullish_results = []
-    bearish_results = []
-    total_stocks = len(stocks_to_scan)
-
-    for i, stock in enumerate(stocks_to_scan):
-        res = scan_stock(stock, interval_val, period_val)
-        if res:
-            if res["Type"] == "Bullish":
-                bullish_results.append(res)
-            else:
-                bearish_results.append(res)
-        progress_bar.progress((i + 1) / total_stocks)
-
-    st.success("স্ক্যানিং সম্পন্ন!")
-
-    # ট্যাবস বা সেকশন ডিজাইন (দ্বিতীয় ছবির স্টাইল)[span_5](start_span)[span_5](end_span)
-    tab1, tab2 = st.tabs(
-        [
-            f"🟢 বুলিশ সেটআপ ({len(bullish_results)})",
-            f"🔴 বিয়ারিশ সেটআপ ({len(bearish_results)})",
-        ]
-    )
-
-    with tab1:
-        if bullish_results:
-            st.markdown("### 🟢 সাপোর্ট তৈরি হওয়া বুলিশ সেটআপ:")
-            for item in bullish_results:
-                clean_symbol = item["Stock"]
-                groww_url = f"https://groww.in/stocks/{clean_symbol.lower()}"
-                tv_url = f"https://in.tradingview.com/chart/?symbol=NSE:{clean_symbol}"
-
-                st.markdown(f"## **{clean_symbol}**")
-                st.write(f"LTP: ₹{item['LTP']} | {item['Price_Tag']}")
-                st.markdown(f"🔥 **{item['Pattern']}**")
-                st.write(
-                    f"🟢 {item['Buyer_Pct']}% Buyers | 🔴 {item['Seller_Pct']}% Sellers"
-                )
-                st.progress(item["Buyer_Pct"] / 100)
-
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    st.link_button("🚀 Open in Groww", groww_url)
-                with col_b2:
-                    st.link_button("📈 TradingView", tv_url)
-                st.markdown("---")
-        else:
-            st.warning("এই সেকশনে কোনো বুলিশ সেটআপ পাওয়া যায়নি।")
-
-    with tab2:
-        if bearish_results:
-            st.markdown("### 🔴 বিয়ারিশ বা ডাউনট্রেন্ড সেটআপ:")
-            for item in bearish_results:
-                clean_symbol = item["Stock"]
-                groww_url = f"https://groww.in/stocks/{clean_symbol.lower()}"
-                tv_url = f"https://in.tradingview.com/chart/?symbol=NSE:{clean_symbol}"
-
-                st.markdown(f"## **{clean_symbol}**")
-                st.write(f"LTP: ₹{item['LTP']} | {item['Price_Tag']}")
-                st.markdown(f"⚠️ **{item['Pattern']}**")
-                st.write(
-                    f"🟢 {item['Buyer_Pct']}% Buyers | 🔴 {item['Seller_Pct']}% Sellers"
-                )
-                st.progress(item['Buyer_Pct'] / 100)
-
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    st.link_button("🚀 Open in Groww", groww_url)
-                with col_b2:
-                    st.link_button("📈 TradingView", tv_url)
-                st.markdown("---")
-        else:
-            st.warning("এই সেকশনে কোনো বিয়ারিশ সেটআপ পাওয়া যায়নি।")
-            
+        "ADANIENT.NS",
+        "BHEL.NS",
+        "BORORENEW.NS",
+        "WEBELSOLAR.NS",
+        "GENUSPOWER.NS",
+        "HPL.NS",
+        "SCHNEIDER.NS",
+        "CGPOWER.NS",
+        "SIEMENS.NS",
+        "ABB.NS",
+        "HITACHI.NS",
+        "CUMMINSIND.NS",
+        "KEC.NS",
+        "KALPATPOWR.NS",
+        "RITES.NS",
