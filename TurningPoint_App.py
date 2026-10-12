@@ -927,57 +927,6 @@ SUB_SECTORS = {
         "OIL.NS",
     ],
 }
-
-# ইউজার ইন্টারফেস কন্ট্রোলস
-c_top1, c_top2 = st.columns([2, 2])
-with c_top1:
-    selected_category = st.selectbox(
-        "একটি সাব-সেক্টর বেছে নিন:", list(SUB_SECTORS.keys())
-    )
-with c_top2:
-    timeframe_option = st.selectbox(
-        "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
-        ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
-    )
-
-selected_price_status = st.multiselect(
-    "🎯 প্রাইস রেঞ্জ সিলেক্ট করুন:",
-    ["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
-    default=["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
-)
-
-st.write("")
-start_scan = st.button(
-    "🔍 স্ক্যান শুরু করুন", use_container_width=True, type="primary"
-)
-
-
-def fetch_stock_data(ticker, tf_choice):
-    stock = yf.Ticker(ticker)
-    if tf_choice == "1 Day (Daily)":
-        return stock.history(period="3mo", interval="1d")
-    elif tf_choice == "4 Hours (4h)":
-        df = stock.history(period="2mo", interval="1h")
-        if not df.empty:
-            df = (
-                df.resample("4h")
-                .agg({
-                    "Open": "first",
-                    "High": "max",
-                    "Low": "min",
-                    "Close": "last",
-                    "Volume": "sum",
-                })
-                .dropna()
-            )
-        return df
-    elif tf_choice == "1 Hour (1h)":
-        return stock.history(period="1mo", interval="1h")
-    elif tf_choice == "15 Minutes (15m)":
-        return stock.history(period="5d", interval="15m")
-    return pd.DataFrame()
-
-
 def analyze_stock(df):
     if len(df) < 50:
         return None
@@ -1003,29 +952,22 @@ def analyze_stock(df):
     lower_shadow1 = min(open1, close1) - low1
     upper_shadow1 = high1 - max(open1, close1)
 
-    # ৫০ দিনের ডেটা এবং নিখুঁত Higher Low লজিক
+    # ৫০ দিনের ডেটা এবং ইন্ডিকেটর
     full_history = df.iloc[-50:]
     sma_50 = full_history["Close"].mean()
-    recent_low = full_history["Low"].min()
-    recent_high = full_history["High"].max()
 
-    # আগের সপ্তাহের লো গুলোর তুলনায় বর্তমান লো উঁচুতে আছে কি না (Strict Higher Low Check)
-    # এর মাধ্যমে নিশ্চিত করা হবে যে স্টকটি Lower Low বা ডাউনট্রেন্ডে নেই
-    mid_lows = full_history["Low"].iloc[-25:-5].min()
-    is_strict_higher_low = low1 > mid_lows and low1 >= recent_low
-
-    # ট্রেন্ড এবং সাপোর্ট ভ্যালিডেশন
-    is_in_uptrend = close1 >= sma_50 * 0.92  # স্টকটি পজিটিভ ট্রেন্ডে থাকতে হবে
-    is_at_support = (
-        low1 <= mid_lows * 1.03 or close1 <= sma_50 * 1.05
-    )  # সাপোর্টের কাছাকাছি
-    is_at_resistance = high1 >= recent_high * 0.98
+    # 🔥 কঠোর আপট্রেন্ড ও Higher Low ফিল্টার (যেমনটি আপনি চার্টে দেখতে চান)
+    # ১. স্টকটি অবশ্যই ৫০ SMA-এর উপরে থাকতে হবে (Uptrend Confirmation)
+    # ২. সাম্প্রতিক প্রাইসটি মাঝারি লেভেলের লো থেকে ওপরে অর্থাৎ Higher Low ফরমেশনে থাকবে
+    is_in_strong_uptrend = close1 > sma_50
+    recent_low_20 = full_history["Low"].iloc[-20:].min()
+    is_higher_low_structure = low1 >= recent_low_20 * 0.98
 
     pattern = "⚪ No Pattern"
     type_tag = "None"
 
-    # 🟢 কঠোরভাবে ভ্যালিডেটেড Higher Low এবং সাপোর্ট জোনে ক্যান্ডেল প্যাটার্ন চেক
-    if is_in_uptrend and is_strict_higher_low:
+    # শুধুমাত্র শক্তিশালী আপট্রেন্ড এবং Higher Low জোনের স্টকগুলোই স্ক্যান করবে
+    if is_in_strong_uptrend and is_higher_low_structure:
 
         # ১. Hammer (হ্যামার)
         if (
@@ -1033,7 +975,7 @@ def analyze_stock(df):
             and (lower_shadow1 >= 2 * body1)
             and (upper_shadow1 <= 0.3 * body1)
         ):
-            pattern = "🔨 Bullish Hammer (Strict Higher Low)"
+            pattern = "🔨 Bullish Hammer (Uptrend HL)"
             type_tag = "Bullish"
 
         # ২. Inverse Hammer (ইনভার্স হ্যামার)
@@ -1042,7 +984,7 @@ def analyze_stock(df):
             and (upper_shadow1 >= 2 * body1)
             and (lower_shadow1 <= 0.3 * body1)
         ):
-            pattern = "🔨 Inverse Hammer (Strict Higher Low)"
+            pattern = "🔨 Inverse Hammer (Uptrend HL)"
             type_tag = "Bullish"
 
         # ৩. Bullish Engulfing (বুলিশ এনগাল্ফিং)
@@ -1052,7 +994,7 @@ def analyze_stock(df):
             and (close1 >= c2["Open"])
             and (open1 <= c2["Close"])
         ):
-            pattern = "🔥 Bullish Engulfing (Strict Higher Low)"
+            pattern = "🔥 Bullish Engulfing (Uptrend HL)"
             type_tag = "Bullish"
 
         # ৪. Piercing Line (পিয়ার্সিং লাইন)
@@ -1062,7 +1004,7 @@ def analyze_stock(df):
             and (open1 < c2["Low"])
             and (close1 >= (c2["Open"] + c2["Close"]) / 2)
         ):
-            pattern = "⚡ Piercing Line (Strict Higher Low)"
+            pattern = "⚡ Piercing Line (Uptrend HL)"
             type_tag = "Bullish"
 
         # ৫. Dragonfly Doji (ড্রাগনফ্লাই ডোজি)
@@ -1071,7 +1013,7 @@ def analyze_stock(df):
             and (lower_shadow1 >= 0.6 * range1)
             and (upper_shadow1 <= 0.1 * range1)
         ):
-            pattern = "🪲 Dragonfly Doji (Strict Higher Low)"
+            pattern = "🪲 Dragonfly Doji (Uptrend HL)"
             type_tag = "Bullish"
 
         # ৬. Doji (ডোজি)
@@ -1080,7 +1022,7 @@ def analyze_stock(df):
             and lower_shadow1 >= 0.3 * range1
             and upper_shadow1 >= 0.3 * range1
         ):
-            pattern = "➕ Standard Doji (Strict Higher Low)"
+            pattern = "➕ Standard Doji (Uptrend HL)"
             type_tag = "Bullish"
 
         # ৭. Spinning Top (স্পিনিং টপ)
@@ -1089,19 +1031,8 @@ def analyze_stock(df):
             and lower_shadow1 >= 0.3 * range1
             and upper_shadow1 >= 0.3 * range1
         ):
-            pattern = "🌀 Spinning Top (Strict Higher Low)"
+            pattern = "🌀 Spinning Top (Uptrend HL)"
             type_tag = "Bullish"
-
-    # 🔴 বেয়ারিশ প্যাটার্ন (রেজিস্ট্যান্সের জন্য)
-    if is_at_resistance and type_tag == "None":
-        if (
-            (c2["Close"] > c2["Open"])
-            and (close1 < open1)
-            and (close1 <= c2["Open"])
-            and (open1 >= c2["Close"])
-        ):
-            pattern = "❄️ Bearish Engulfing"
-            type_tag = "Bearish"
 
     if type_tag == "None":
         return None
@@ -1117,98 +1048,3 @@ def analyze_stock(df):
         "Buyer Power (%)": buyer_power,
         "Seller Power (%)": seller_power,
     }
-
-
-def render_cards(items):
-    for item in items:
-        with st.container():
-            c1, c2, c3, c4 = st.columns([2.5, 2, 3, 2])
-            stock_name = item["Stock"]
-            groww_url = f"https://groww.in/stocks/{stock_name.lower()}"
-            tv_url = (
-                f"https://in.tradingview.com/chart/?symbol=NSE:{stock_name}"
-            )
-
-            with c1:
-                st.markdown(f"### {stock_name}")
-                st.caption(
-                    f"LTP: ₹{item['Price']} | {item['Price_Status']}"
-                )
-            with c2:
-                st.write(f"**{item['Pattern']}**")
-            with c3:
-                b_pow = item["Buyer Power (%)"]
-                s_pow = item["Seller Power (%)"]
-                st.progress(
-                    int(b_pow),
-                    text=f"🟢 {b_pow}% Buyers | 🔴 {s_pow}% Sellers",
-                )
-            with c4:
-                st.link_button("🚀 Open in Groww", groww_url)
-                st.link_button("📈 TradingView", tv_url)
-            st.divider()
-
-
-if start_scan:
-    st.write(
-        f"**{selected_category}** সেকশনে Strict Higher Low এবং ক্যান্ডেল প্যাটার্ন"
-        " স্ক্যান করা হচ্ছে..."
-    )
-
-    bullish_results = []
-    bearish_results = []
-    tickers = SUB_SECTORS[selected_category]
-    progress = st.progress(0)
-
-    for idx, ticker in enumerate(tickers):
-        try:
-            data = fetch_stock_data(ticker, timeframe_option)
-            res = analyze_stock(data)
-            if res and res["Pattern"] != "⚪ No Pattern":
-                if res["Price_Status"] in selected_price_status:
-                    clean_name = ticker.replace(".NS", "")
-                    card_data = {
-                        "Stock": clean_name,
-                        "Price": res["Price"],
-                        "Price_Status": res["Price_Status"],
-                        "Pattern": res["Pattern"],
-                        "Buyer Power (%)": res["Buyer Power (%)"],
-                        "Seller Power (%)": res["Seller Power (%)"],
-                    }
-                    if res["Type"] == "Bullish":
-                        bullish_results.append(card_data)
-                    elif res["Type"] == "Bearish":
-                        bearish_results.append(card_data)
-        except Exception:
-            pass
-        progress.progress((idx + 1) / len(tickers))
-
-    st.success("স্ক্যানিং সম্পন্ন!")
-
-    tab_bullish, tab_bearish = st.tabs([
-        f"🟢 Bullish Setups ({len(bullish_results)})",
-        f"🔴 Bearish Setups ({len(bearish_results)})",
-    ])
-
-    with tab_bullish:
-        if bullish_results:
-            st.subheader(
-                "🟢 Strict Higher Low ও সাপোর্টে তৈরি হওয়া বুলিশ প্যাটার্ন"
-                " সেটআপ:"
-            )
-            render_cards(bullish_results)
-        else:
-            st.info(
-                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে এই প্যাটার্নগুলো"
-                " পাওয়া যায়নি।"
-            )
-
-    with tab_bearish:
-        if bearish_results:
-            st.subheader("🔴 রেজিস্ট্যান্সে তৈরি হওয়া বেয়ারিশ সেটআপ:")
-            render_cards(bearish_results)
-        else:
-            st.info(
-                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো বেয়ারিশ সেটআপ"
-                " পাওয়া যায়নি।"
-            )
