@@ -12,7 +12,7 @@ st.caption(
     " স্ক্যানার।"
 )
 
-# আপনার দেওয়া সম্পূর্ণ স্টক লিস্ট (SUB_SECTORS)
+# আপনার সম্পূর্ণ স্টক লিস্ট (SUB_SECTORS)
 SUB_SECTORS = {
     "🏦 1. Banking, Finance & NBFC (260 Stocks)": [
         "HDFCBANK.NS",
@@ -927,6 +927,57 @@ SUB_SECTORS = {
         "OIL.NS",
     ],
 }
+
+# ইউজার ইন্টারফেস কন্ট্রোলস
+c_top1, c_top2 = st.columns([2, 2])
+with c_top1:
+    selected_category = st.selectbox(
+        "একটি সাব-সেক্টর বেছে নিন:", list(SUB_SECTORS.keys())
+    )
+with c_top2:
+    timeframe_option = st.selectbox(
+        "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
+        ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
+    )
+
+selected_price_status = st.multiselect(
+    "🎯 প্রাইস রেঞ্জ সিলেক্ট করুন:",
+    ["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
+    default=["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
+)
+
+st.write("")
+start_scan = st.button(
+    "🔍 স্ক্যান শুরু করুন", use_container_width=True, type="primary"
+)
+
+
+def fetch_stock_data(ticker, tf_choice):
+    stock = yf.Ticker(ticker)
+    if tf_choice == "1 Day (Daily)":
+        return stock.history(period="3mo", interval="1d")
+    elif tf_choice == "4 Hours (4h)":
+        df = stock.history(period="2mo", interval="1h")
+        if not df.empty:
+            df = (
+                df.resample("4h")
+                .agg({
+                    "Open": "first",
+                    "High": "max",
+                    "Low": "min",
+                    "Close": "last",
+                    "Volume": "sum",
+                })
+                .dropna()
+            )
+        return df
+    elif tf_choice == "1 Hour (1h)":
+        return stock.history(period="1mo", interval="1h")
+    elif tf_choice == "15 Minutes (15m)":
+        return stock.history(period="5d", interval="15m")
+    return pd.DataFrame()
+
+
 def analyze_stock(df):
     if len(df) < 50:
         return None
@@ -956,9 +1007,7 @@ def analyze_stock(df):
     full_history = df.iloc[-50:]
     sma_50 = full_history["Close"].mean()
 
-    # 🔥 কঠোর আপট্রেন্ড ও Higher Low ফিল্টার (যেমনটি আপনি চার্টে দেখতে চান)
-    # ১. স্টকটি অবশ্যই ৫০ SMA-এর উপরে থাকতে হবে (Uptrend Confirmation)
-    # ২. সাম্প্রতিক প্রাইসটি মাঝারি লেভেলের লো থেকে ওপরে অর্থাৎ Higher Low ফরমেশনে থাকবে
+    # আপট্রেন্ড ও Higher Low ফিল্টার
     is_in_strong_uptrend = close1 > sma_50
     recent_low_20 = full_history["Low"].iloc[-20:].min()
     is_higher_low_structure = low1 >= recent_low_20 * 0.98
@@ -966,7 +1015,6 @@ def analyze_stock(df):
     pattern = "⚪ No Pattern"
     type_tag = "None"
 
-    # শুধুমাত্র শক্তিশালী আপট্রেন্ড এবং Higher Low জোনের স্টকগুলোই স্ক্যান করবে
     if is_in_strong_uptrend and is_higher_low_structure:
 
         # ১. Hammer (হ্যামার)
@@ -1048,3 +1096,98 @@ def analyze_stock(df):
         "Buyer Power (%)": buyer_power,
         "Seller Power (%)": seller_power,
     }
+
+
+def render_cards(items):
+    for item in items:
+        with st.container():
+            c1, c2, c3, c4 = st.columns([2.5, 2, 3, 2])
+            stock_name = item["Stock"]
+            groww_url = f"https://groww.in/stocks/{stock_name.lower()}"
+            tv_url = (
+                f"https://in.tradingview.com/chart/?symbol=NSE:{stock_name}"
+            )
+
+            with c1:
+                st.markdown(f"### {stock_name}")
+                st.caption(
+                    f"LTP: ₹{item['Price']} | {item['Price_Status']}"
+                )
+            with c2:
+                st.write(f"**{item['Pattern']}**")
+            with c3:
+                b_pow = item["Buyer Power (%)"]
+                s_pow = item["Seller Power (%)"]
+                st.progress(
+                    int(b_pow),
+                    text=f"🟢 {b_pow}% Buyers | 🔴 {s_pow}% Sellers",
+                )
+            with c4:
+                st.link_button("🚀 Open in Groww", groww_url)
+                st.link_button("📈 TradingView", tv_url)
+            st.divider()
+
+
+if start_scan:
+    st.write(
+        f"**{selected_category}** সেকশনে সম্পূর্ণ স্টক লিস্ট এবং Higher Low"
+        " ক্যান্ডেল প্যাটার্ন স্ক্যান করা হচ্ছে..."
+    )
+
+    bullish_results = []
+    bearish_results = []
+    tickers = SUB_SECTORS[selected_category]
+    progress = st.progress(0)
+
+    for idx, ticker in enumerate(tickers):
+        try:
+            data = fetch_stock_data(ticker, timeframe_option)
+            res = analyze_stock(data)
+            if res and res["Pattern"] != "⚪ No Pattern":
+                if res["Price_Status"] in selected_price_status:
+                    clean_name = ticker.replace(".NS", "")
+                    card_data = {
+                        "Stock": clean_name,
+                        "Price": res["Price"],
+                        "Price_Status": res["Price_Status"],
+                        "Pattern": res["Pattern"],
+                        "Buyer Power (%)": res["Buyer Power (%)"],
+                        "Seller Power (%)": res["Seller Power (%)"],
+                    }
+                    if res["Type"] == "Bullish":
+                        bullish_results.append(card_data)
+                    elif res["Type"] == "Bearish":
+                        bearish_results.append(card_data)
+        except Exception:
+            pass
+        progress.progress((idx + 1) / len(tickers))
+
+    st.success("স্ক্যানিং সম্পন্ন!")
+
+    tab_bullish, tab_bearish = st.tabs([
+        f"🟢 Bullish Setups ({len(bullish_results)})",
+        f"🔴 Bearish Setups ({len(bearish_results)})",
+    ])
+
+    with tab_bullish:
+        if bullish_results:
+            st.subheader(
+                "🟢 Uptrend Higher Low ও সাপোর্টে তৈরি হওয়া বুলিশ প্যাটার্ন"
+                " সেটআপ:"
+            )
+            render_cards(bullish_results)
+        else:
+            st.info(
+                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে এই প্যাটার্নগুলো"
+                " পাওয়া যায়নি।"
+            )
+
+    with tab_bearish:
+        if bearish_results:
+            st.subheader("🔴 রেজিস্ট্যান্সে তৈরি হওয়া বেয়ারিশ সেটআপ:")
+            render_cards(bearish_results)
+        else:
+            st.info(
+                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো বেয়ারিশ সেটআপ"
+                " পাওয়া যায়নি।"
+            )
