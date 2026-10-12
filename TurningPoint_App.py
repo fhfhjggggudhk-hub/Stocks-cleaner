@@ -4,12 +4,12 @@ import yfinance as yf
 
 # পেজ কনফিগারেশন
 st.set_page_config(
-    page_title="Ultimate Higher Low & Candlestick Screener", layout="wide"
+    page_title="Strict Higher Low & Candlestick Screener", layout="wide"
 )
-st.title("🎯 Ultimate Higher Low & Candlestick Screener")
+st.title("🎯 Strict Higher Low & Candlestick Screener")
 st.caption(
-    "পূর্ণাঙ্গ স্টক লিস্ট, Higher Low সাপোর্ট জোন এবং আপনার পছন্দের সকল বুলিশ"
-    " ক্যান্ডেলস্টিক প্যাটার্ন স্ক্যানার।"
+    "সুনির্দিষ্ট Higher Low স্ট্রাকচার এবং আপনার পছন্দের বুলিশ ক্যান্ডেলস্টিক প্যাটার্ন"
+    " স্ক্যানার।"
 )
 
 # আপনার দেওয়া সম্পূর্ণ স্টক লিস্ট (SUB_SECTORS)
@@ -1003,23 +1003,29 @@ def analyze_stock(df):
     lower_shadow1 = min(open1, close1) - low1
     upper_shadow1 = high1 - max(open1, close1)
 
-    # ৫০ দিনের ডেটা ও Higher Low লজিক
+    # ৫০ দিনের ডেটা এবং নিখুঁত Higher Low লজিক
     full_history = df.iloc[-50:]
     sma_50 = full_history["Close"].mean()
     recent_low = full_history["Low"].min()
     recent_high = full_history["High"].max()
 
-    # ট্রেন্ড এবং Higher Low জোন ভ্যালিডেশন
-    is_not_in_heavy_downtrend = close1 >= sma_50 * 0.85
-    is_higher_low = low1 >= recent_low * 0.95 and low1 <= recent_low * 1.15
-    is_at_support = low1 <= recent_low * 1.05 or close1 <= sma_50 * 1.05
+    # আগের সপ্তাহের লো গুলোর তুলনায় বর্তমান লো উঁচুতে আছে কি না (Strict Higher Low Check)
+    # এর মাধ্যমে নিশ্চিত করা হবে যে স্টকটি Lower Low বা ডাউনট্রেন্ডে নেই
+    mid_lows = full_history["Low"].iloc[-25:-5].min()
+    is_strict_higher_low = low1 > mid_lows and low1 >= recent_low
+
+    # ট্রেন্ড এবং সাপোর্ট ভ্যালিডেশন
+    is_in_uptrend = close1 >= sma_50 * 0.92  # স্টকটি পজিটিভ ট্রেন্ডে থাকতে হবে
+    is_at_support = (
+        low1 <= mid_lows * 1.03 or close1 <= sma_50 * 1.05
+    )  # সাপোর্টের কাছাকাছি
     is_at_resistance = high1 >= recent_high * 0.98
 
     pattern = "⚪ No Pattern"
     type_tag = "None"
 
-    # 🟢 Higher Low এবং সাপোর্টে আপনার নির্দিষ্ট ক্যান্ডেলস্টিক প্যাটার্নসমূহ
-    if is_not_in_heavy_downtrend and (is_higher_low or is_at_support):
+    # 🟢 কঠোরভাবে ভ্যালিডেটেড Higher Low এবং সাপোর্ট জোনে ক্যান্ডেল প্যাটার্ন চেক
+    if is_in_uptrend and is_strict_higher_low:
 
         # ১. Hammer (হ্যামার)
         if (
@@ -1027,7 +1033,7 @@ def analyze_stock(df):
             and (lower_shadow1 >= 2 * body1)
             and (upper_shadow1 <= 0.3 * body1)
         ):
-            pattern = "🔨 Bullish Hammer (HL Support)"
+            pattern = "🔨 Bullish Hammer (Strict Higher Low)"
             type_tag = "Bullish"
 
         # ২. Inverse Hammer (ইনভার্স হ্যামার)
@@ -1036,7 +1042,7 @@ def analyze_stock(df):
             and (upper_shadow1 >= 2 * body1)
             and (lower_shadow1 <= 0.3 * body1)
         ):
-            pattern = "🔨 Inverse Hammer (HL Support)"
+            pattern = "🔨 Inverse Hammer (Strict Higher Low)"
             type_tag = "Bullish"
 
         # ৩. Bullish Engulfing (বুলিশ এনগাল্ফিং)
@@ -1046,7 +1052,7 @@ def analyze_stock(df):
             and (close1 >= c2["Open"])
             and (open1 <= c2["Close"])
         ):
-            pattern = "🔥 Bullish Engulfing (HL Support)"
+            pattern = "🔥 Bullish Engulfing (Strict Higher Low)"
             type_tag = "Bullish"
 
         # ৪. Piercing Line (পিয়ার্সিং লাইন)
@@ -1056,7 +1062,7 @@ def analyze_stock(df):
             and (open1 < c2["Low"])
             and (close1 >= (c2["Open"] + c2["Close"]) / 2)
         ):
-            pattern = "⚡ Piercing Line (HL Support)"
+            pattern = "⚡ Piercing Line (Strict Higher Low)"
             type_tag = "Bullish"
 
         # ৫. Dragonfly Doji (ড্রাগনফ্লাই ডোজি)
@@ -1065,7 +1071,7 @@ def analyze_stock(df):
             and (lower_shadow1 >= 0.6 * range1)
             and (upper_shadow1 <= 0.1 * range1)
         ):
-            pattern = "🪲 Dragonfly Doji (HL Support)"
+            pattern = "🪲 Dragonfly Doji (Strict Higher Low)"
             type_tag = "Bullish"
 
         # ৬. Doji (ডোজি)
@@ -1074,7 +1080,7 @@ def analyze_stock(df):
             and lower_shadow1 >= 0.3 * range1
             and upper_shadow1 >= 0.3 * range1
         ):
-            pattern = "➕ Standard Doji (HL Support)"
+            pattern = "➕ Standard Doji (Strict Higher Low)"
             type_tag = "Bullish"
 
         # ৭. Spinning Top (স্পিনিং টপ)
@@ -1083,7 +1089,7 @@ def analyze_stock(df):
             and lower_shadow1 >= 0.3 * range1
             and upper_shadow1 >= 0.3 * range1
         ):
-            pattern = "🌀 Spinning Top (HL Support)"
+            pattern = "🌀 Spinning Top (Strict Higher Low)"
             type_tag = "Bullish"
 
     # 🔴 বেয়ারিশ প্যাটার্ন (রেজিস্ট্যান্সের জন্য)
@@ -1145,8 +1151,8 @@ def render_cards(items):
 
 if start_scan:
     st.write(
-        f"**{selected_category}** সেকশনে সম্পূর্ণ স্টক লিস্ট এবং Higher Low"
-        " ক্যান্ডেল প্যাটার্ন স্ক্যান করা হচ্ছে..."
+        f"**{selected_category}** সেকশনে Strict Higher Low এবং ক্যান্ডেল প্যাটার্ন"
+        " স্ক্যান করা হচ্ছে..."
     )
 
     bullish_results = []
@@ -1187,7 +1193,8 @@ if start_scan:
     with tab_bullish:
         if bullish_results:
             st.subheader(
-                "🟢 Higher Low ও সাপোর্টে তৈরি হওয়া বুলিশ প্যাটার্ন সেটআপ:"
+                "🟢 Strict Higher Low ও সাপোর্টে তৈরি হওয়া বুলিশ প্যাটার্ন"
+                " সেটআপ:"
             )
             render_cards(bullish_results)
         else:
