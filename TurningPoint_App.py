@@ -4,15 +4,15 @@ import yfinance as yf
 
 # পেজ কনফিগারেশন
 st.set_page_config(
-    page_title="AI Pro Higher Low & Pattern Screener", layout="wide"
+    page_title="Ultimate Higher Low & Candlestick Screener", layout="wide"
 )
-st.title("⚡ AI Pro Higher Low & Pattern Screener (Master Scanner)")
+st.title("🎯 Ultimate Higher Low & Candlestick Screener")
 st.caption(
-    "১০টি সাব-সেক্টরের প্রপার লিকুইড স্টকের Higher Low রিটেস্ট, ভলিউম সার্জ এবং"
-    " অ্যাডভান্সড ক্যান্ডেলস্টিক প্যাটার্ন স্ক্যানার।"
+    "পূর্ণাঙ্গ স্টক লিস্ট, Higher Low সাপোর্ট জোন এবং আপনার পছন্দের সকল বুলিশ"
+    " ক্যান্ডেলস্টিক প্যাটার্ন স্ক্যানার।"
 )
 
-# ১০টি সাব-সেক্টরের স্টকের তালিকা
+# আপনার দেওয়া সম্পূর্ণ স্টক লিস্ট (SUB_SECTORS)
 SUB_SECTORS = {
     "🏦 1. Banking, Finance & NBFC (260 Stocks)": [
         "HDFCBANK.NS",
@@ -50,14 +50,12 @@ SUB_SECTORS = {
         "IOB.NS",
         "BANKINDIA.NS",
         "UCOBANK.NS",
-        "CREDACC.NS",
         "POONAWALLA.NS",
         "IIFL.NS",
         "PEL.NS",
         "CANFINHOME.NS",
         "HOMEFIRST.NS",
         "HUDCO.NS",
-        "MAXFIN.NS",
         "ABCAPITAL.NS",
         "ICICIPRULI.NS",
         "HDFCLIFE.NS",
@@ -66,11 +64,8 @@ SUB_SECTORS = {
         "PAYTM.NS",
         "POLICYBZR.NS",
         "PSB.NS",
-        "INDIABULLS.NS",
         "DCBBANK.NS",
         "FINPIPE.NS",
-        "JMFINANCIL.NS",
-        "EDELWEISS.NS",
         "MOTILALOFS.NS",
         "ANGELONE.NS",
         "5PAISA.NS",
@@ -91,11 +86,9 @@ SUB_SECTORS = {
         "ARMANFIN.NS",
         "SURYODAY.NS",
         "ESAFSFB.NS",
-        "JSFB.NS",
         "UTKARSHBNK.NS",
         "FINOPB.NS",
         "KALYANKJIL.NS",
-        "GEOJITFSL.NS",
         "SBICARD.NS",
         "SUNDARMFIN.NS",
         "NUVAMA.NS",
@@ -104,9 +97,7 @@ SUB_SECTORS = {
         "CAMSLTD.NS",
         "CDSL.NS",
         "GICHSGFIN.NS",
-        "DHANI.NS",
         "IFCI.NS",
-        "TFCI.NS",
         "RELIGARE.NS",
         "VAKRANGEE.NS",
         "L&TFH.NS",
@@ -114,35 +105,133 @@ SUB_SECTORS = {
         "BAJAJHFL.NS",
         "SBFC.NS",
         "NORTHERNARC.NS",
-        "MANBA.NS",
         "IXIGO.NS",
+        "EASEMYTRIP.NS",
         "FIVESTAR.NS",
         "KIMS.NS",
         "MEDANTA.NS",
-        "CHOICEIN.NS",
         "SMCGLOBAL.NS",
         "MONEYBOXX.NS",
         "FINCABLES.NS",
-        "MFS.NS",
-        "SRG.NS",
-        "DOLAT.NS",
-        "ARIHANTCAP.NS",
-        "MONARCH.NS",
-        "SMIFS.NS",
-        "APEX.NS",
-        "AGARWAL.NS",
-        "SHSCL.NS",
-        "VERTO.NS",
         "CAPITALSFB.NS",
-        "GROWW.NS",
-        "NAVI.NS",
         "SPANDANA.NS",
         "SATIN.NS",
         "MUTHOOTMF.NS",
         "FUSION.NS",
         "INDOSTAR.NS",
-        "SHRIRAMCITY.NS",
+        "AHLUWALIA.NS",
         "CANTABIL.NS",
+        "AMBER.NS",
+        "FINEOTEX.NS",
+        "ASTEC.NS",
+        "DCW.NS",
+        "SHARDACROP.NS",
+        "CAMLINFINE.NS",
+        "THIRUMALAI.NS",
+        "AVADHSUGAR.NS",
+        "KIRLOSENG.NS",
+        "AMIORG.NS",
+        "AETHER.NS",
+        "TATVA.NS",
+        "EPIGRAL.NS",
+        "PARAMOUNT.NS",
+        "DILIPBUILD.NS",
+        "SELAN.NS",
+        "VIMTALABS.NS",
+        "COROMANDEL.NS",
+        "GUFICBIO.NS",
+        "HESTERBIO.NS",
+        "MALLCOM.NS",
+        "MOREPENLAB.NS",
+        "ORIENTBELL.NS",
+        "RUBYMILLS.NS",
+        "TASTYBITE.NS",
+        "UNIVCABLES.NS",
+        "VALIANTORG.NS",
+        "VASCONEQ.NS",
+        "ZOTA.NS",
+        "KIRLOSIND.NS",
+        "IFBAGRO.NS",
+        "ADFFOODS.NS",
+        "MIRZAINT.NS",
+        "LIBERTSHOE.NS",
+        "KHADIM.NS",
+        "ZODIACLOTH.NS",
+        "SPENCERS.NS",
+        "LANDMARK.NS",
+        "ETHOSLTD.NS",
+        "VMART.NS",
+        "GOKEX.NS",
+        "VIPIND.NS",
+        "REDINGTON.NS",
+        "SAKSOFT.NS",
+        "SUBEXLTD.NS",
+        "INFOBEAN.NS",
+        "GENESYS.NS",
+        "MTNL.NS",
+        "TEJASNET.NS",
+        "HFCL.NS",
+        "RAILTEL.NS",
+        "OPTIEMUS.NS",
+        "ITI.NS",
+        "STERTOOLS.NS",
+        "NELCO.NS",
+        "EXPLEOSOL.NS",
+        "CIGNITI.NS",
+        "RAMCOSYS.NS",
+        "QUESS.NS",
+        "TEAMLEASE.NS",
+        "SIS.NS",
+        "FIRSTSOURCE.NS",
+        "ALLSEC.NS",
+        "MPSLTD.NS",
+        "DATAMATICS.NS",
+        "SIGNPOST.NS",
+        "GTLINFRA.NS",
+        "SOFTTECH.NS",
+        "INNOVANA.NS",
+        "AXISCADES.NS",
+        "ONWARDTEC.NS",
+        "TRIGYN.NS",
+        "DREAMFOLKS.NS",
+        "E2E.NS",
+        "XELPMOC.NS",
+        "JSL.NS",
+        "MIDHANI.NS",
+        "GALLANTT.NS",
+        "ISMTLTD.NS",
+        "GODAWARI.NS",
+        "KAJARIRCER.NS",
+        "SOMANYCERA.NS",
+        "CERA.NS",
+        "PRINCEPIPE.NS",
+        "ASTRAL.NS",
+        "SUPREMEIND.NS",
+        "STARCEMENT.NS",
+        "ORIENTCEM.NS",
+        "NCLIND.NS",
+        "BHARATWIRE.NS",
+        "SHANKARA.NS",
+        "PENIND.NS",
+        "GOODLUCK.NS",
+        "CENTURYTEX.NS",
+        "RAYMOND.NS",
+        "SWANENERGY.NS",
+        "ALOKINDS.NS",
+        "KPRMILL.NS",
+        "LUXIND.NS",
+        "PAGEIND.NS",
+        "RUPA.NS",
+        "DOLLAR.NS",
+        "TRIDENT.NS",
+        "WELSPUNLIV.NS",
+        "INDOCOUNT.NS",
+        "FILATEX.NS",
+        "RSWM.NS",
+        "SUTLEJTEX.NS",
+        "GARFIBRES.NS",
+        "GOCOLORS.NS",
+        "VEDANTFASH.NS",
     ],
     "⛽ 2. Oil, Gas, Energy & Chemicals (180 Stocks)": [
         "RELIANCE.NS",
@@ -165,7 +254,6 @@ SUB_SECTORS = {
         "SUZLON.NS",
         "ADANIGREEN.NS",
         "ADANIPOWER.NS",
-        "SJWN.NS",
         "NHPC.NS",
         "INOXWIND.NS",
         "KPIGREEN.NS",
@@ -210,17 +298,12 @@ SUB_SECTORS = {
         "CHEMCON.NS",
         "HERANBA.NS",
         "INDIAGLYCO.NS",
-        "JAYAGRO.NS",
         "BALRAMCHIN.NS",
         "TRIVENI.NS",
         "RENUKA.NS",
         "EIDPARRY.NS",
         "BAJAJHIND.NS",
-        "DHARAMSI.NS",
         "PRAJIND.NS",
-        "GOCLCORP.NS",
-        "EXCELINDUS.NS",
-        "SURYAROSH.NS",
         "JINDALSAW.NS",
         "WELCORP.NS",
         "MAHSEAMLES.NS",
@@ -241,65 +324,33 @@ SUB_SECTORS = {
         "SURYALAXMI.NS",
         "GIPCL.NS",
         "SANGHIIND.NS",
-        "SURAJEST.NS",
         "PRIVISCL.NS",
         "FINEOTEX.NS",
         "ASTEC.NS",
         "DCW.NS",
         "SHARDACROP.NS",
         "CAMLINFINE.NS",
-        "GOCL.NS",
-        "CHEMFAB.NS",
-        "ORIENTCARBON.NS",
         "THIRUMALAI.NS",
-        "KOTARISUG.NS",
-        "UGARSUGAR.NS",
-        "MAGADSUGAR.NS",
-        "DALMIASUG.NS",
-        "DWARKESH.NS",
-        "UTAMSUGAR.NS",
         "AVADHSUGAR.NS",
-        "APCOTEXINFO.NS",
         "KIRLOSENG.NS",
-        "SOTL.NS",
-        "ANURAS.NS",
         "AMIORG.NS",
         "AETHER.NS",
         "TATVA.NS",
+        "SURYODAY.NS",
         "LAXMICHEM.NS",
         "EPIGRAL.NS",
         "PARAMOUNT.NS",
         "DILIPBUILD.NS",
-        "JISLJALEQS.NS",
-        "HINDOILEXP.NS",
         "SELAN.NS",
-        "CONFIPET.NS",
-        "SANGHVIMOVER.NS",
         "BASF.NS",
         "BAYERCROP.NS",
         "DHANUKA.NS",
         "INSECTICID.NS",
-        "BHAGCHEM.NS",
-        "BESTAGRO.NS",
         "VALIANTORG.NS",
         "NOCIL.NS",
         "HIKAL.NS",
-        "KOTHARIPET.NS",
-        "PANAMAX.NS",
         "GUJALKALI.NS",
         "MOL.NS",
-        "SADBHAV.NS",
-        "DCM.NS",
-        "IGPETRO.NS",
-        "KOTARI.NS",
-        "AKSHARCHEM.NS",
-        "BODALCHEM.NS",
-        "KIRIINDUS.NS",
-        "BHAGERIA.NS",
-        "VISHNU.NS",
-        "DYCL.NS",
-        "ASAHIINDIA.NS",
-        "ORIENTABRA.NS",
     ],
     "🏥 3. Pharma, Healthcare & Biotech (170 Stocks)": [
         "SUNPHARMA.NS",
@@ -334,6 +385,7 @@ SUB_SECTORS = {
         "SANOFI.NS",
         "AJANTPHARM.NS",
         "MARKSANS.NS",
+        "HIKAL.NS",
         "ASTRAZEN.NS",
         "AARTIDRUGS.NS",
         "GLAND.NS",
@@ -344,10 +396,8 @@ SUB_SECTORS = {
         "VIJAYA.NS",
         "SUVENPHAR.NS",
         "NEULANDLAB.NS",
-        "SOLARA.NS",
         "SHILPAMED.NS",
         "FDC.NS",
-        "DISHMAN.NS",
         "THYROCARE.NS",
         "PGHL.NS",
         "ALEMBICLTD.NS",
@@ -361,43 +411,41 @@ SUB_SECTORS = {
         "RPGLIFE.NS",
         "SEQUENT.NS",
         "SMSPHARMA.NS",
-        "SYNCOM.NS",
         "TTKHLTCARE.NS",
         "UNICHEMLAB.NS",
         "VENUSREM.NS",
         "WOCKPHARMA.NS",
+        "ZEEL.NS",
         "YATHARTH.NS",
         "ARTEMISMED.NS",
         "INDOCO.NS",
-        "JAGSNPHARM.NS",
+        "HESTERBIO.NS",
         "BLISSGVS.NS",
         "SHALBY.NS",
         "SIGACHI.NS",
         "TARSONS.NS",
-        "MEDICO.NS",
         "NOVARTIND.NS",
-        "BASF.NS",
         "RALLIS.NS",
         "INNOVA.NS",
         "AKUMS.NS",
         "JUBILANT.NS",
         "NGLFINE.NS",
-        "BETA.NS",
-        "SUVEN.NS",
         "MEDPLUS.NS",
-        "HEALTHIUM.NS",
         "KRSNAA.NS",
         "ENTERO.NS",
         "WINDLAS.NS",
-        "SANGHVI.NS",
         "AMRUTANJAN.NS",
+        "VIMTALABS.NS",
+        "COROMANDEL.NS",
         "GUFICBIO.NS",
         "NECTARLIFE.NS",
-        "PHARMACEUT.NS",
+        "ORIENTBELL.NS",
+        "RUBYMILLS.NS",
+        "TASTYBITE.NS",
+        "UNIVCABLES.NS",
+        "VALIANTORG.NS",
+        "VASCONEQ.NS",
         "ZOTA.NS",
-        "JAGSONPAL.NS",
-        "LIVGUARD.NS",
-        "ORCHIDPHAR.NS",
     ],
     "💻 4. IT, Software & Tech Services (160 Stocks)": [
         "TCS.NS",
@@ -429,7 +477,6 @@ SUB_SECTORS = {
         "TANLA.NS",
         "RATEGAIN.NS",
         "FSL.NS",
-        "CSOFT.NS",
         "LATENTVIEW.NS",
         "KAYNES.NS",
         "ROUTE.NS",
@@ -469,7 +516,6 @@ SUB_SECTORS = {
         "FIRSTSOURCE.NS",
         "ALLSEC.NS",
         "MPSLTD.NS",
-        "INTEGRA.NS",
         "DATAMATICS.NS",
         "SIGNPOST.NS",
         "GTLINFRA.NS",
@@ -480,10 +526,9 @@ SUB_SECTORS = {
         "ONWARDTEC.NS",
         "TRIGYN.NS",
         "DREAMFOLKS.NS",
+        "MAPMYINDIA.NS",
         "E2E.NS",
         "XELPMOC.NS",
-        "KALYANI.NS",
-        "SIL.NS",
     ],
     "🚂 5. Railways, Logistics & Infrastructure (150 Stocks)": [
         "IRFC.NS",
@@ -504,7 +549,6 @@ SUB_SECTORS = {
         "TCIEXP.NS",
         "MAHLOG.NS",
         "VRLLOG.NS",
-        "GATEWAY.NS",
         "ALLCARGO.NS",
         "AEGISCHEM.NS",
         "GMRINFRA.NS",
@@ -536,9 +580,7 @@ SUB_SECTORS = {
         "SIGNATURE.NS",
         "MAHLIFE.NS",
         "SUNTECK.NS",
-        "IBREALEST.NS",
         "KOLTEPATIL.NS",
-        "GANESHIN.NS",
         "ASHIANA.NS",
         "PURVA.NS",
         "AJMERA.NS",
@@ -547,18 +589,13 @@ SUB_SECTORS = {
         "RAMKY.NS",
         "GPTINFRA.NS",
         "RPPINFRA.NS",
-        "VPRPL.NS",
         "OMAXE.NS",
-        "HUBTOWN.NS",
-        "SURAJEST.NS",
         "ARKADE.NS",
         "KROSS.NS",
-        "GSHIP.NS",
         "DREDGECORP.NS",
         "NAVNETEDUL.NS",
         "SEPC.NS",
         "INDOSTAR.NS",
-        "SCI.NS",
     ],
     "🛒 6. FMCG, Retail & Consumer Durables (140 Stocks)": [
         "HINDUNILVR.NS",
@@ -675,8 +712,7 @@ SUB_SECTORS = {
         "BHARATFORG.NS",
         "ASHOKLEY.NS",
         "TVSMOTOR.NS",
-        "TIINDIA.NS",
-        "AMARAJABAT.NS",
+        "AMARAJA.NS",
         "FORCEPOL.NS",
         "CRAFTSMAN.NS",
         "SUPRAJIT.NS",
@@ -699,7 +735,6 @@ SUB_SECTORS = {
         "CEATLTD.NS",
         "MRF.NS",
         "JKTYRE.NS",
-        "RAMKRASN.NS",
         "VARROC.NS",
         "BANCOINDIA.NS",
         "GABRIEL.NS",
@@ -717,8 +752,6 @@ SUB_SECTORS = {
         "GNA.NS",
         "MENONBE.NS",
         "RICOAUTO.NS",
-        "PRECISION.NS",
-        "ASAL.NS",
         "INDNIPPON.NS",
         "LGBALAKR.NS",
         "JAYBARMARU.NS",
@@ -744,7 +777,6 @@ SUB_SECTORS = {
         "BDL.NS",
         "DATAPATTNS.NS",
         "PARAS.NS",
-        "ASTRAENC.NS",
         "MTARTECH.NS",
         "IDEAFORGE.NS",
         "L&T.NS",
@@ -753,7 +785,6 @@ SUB_SECTORS = {
         "CGPOWER.NS",
         "SUZLON.NS",
         "INOXWIND.NS",
-        "HITACHI.NS",
         "BHEL.NS",
         "CUMMINSIND.NS",
         "THERMAX.NS",
@@ -768,7 +799,6 @@ SUB_SECTORS = {
         "VATECH.NS",
         "IONEXCHANG.NS",
         "PRAJIND.NS",
-        "ACTIONIND.NS",
         "TEXRAIL.NS",
         "TITAGARH.NS",
         "RAILTEL.NS",
@@ -796,7 +826,6 @@ SUB_SECTORS = {
         "JKCEMENT.NS",
         "RAMCOCEM.NS",
         "BIRLACORPN.NS",
-        "HEidelberg.NS",
         "APLAPOLLO.NS",
         "RATNAMANI.NS",
         "JSL.NS",
@@ -825,7 +854,6 @@ SUB_SECTORS = {
         "STARCEMENT.NS",
         "ORIENTCEM.NS",
         "NCLIND.NS",
-        "MANAKSTEEL.NS",
         "BHARATWIRE.NS",
         "SHANKARA.NS",
         "PENIND.NS",
@@ -860,7 +888,6 @@ SUB_SECTORS = {
         "SUZLON.NS",
         "ADANIGREEN.NS",
         "ADANIPOWER.NS",
-        "SJWN.NS",
         "NHPC.NS",
         "INOXWIND.NS",
         "KPIGREEN.NS",
@@ -870,14 +897,11 @@ SUB_SECTORS = {
         "ADANIENT.NS",
         "BHEL.NS",
         "BORORENEW.NS",
-        "WEBELSOLAR.NS",
         "GENUSPOWER.NS",
-        "HPL.NS",
         "SCHNEIDER.NS",
         "CGPOWER.NS",
         "SIEMENS.NS",
         "ABB.NS",
-        "HITACHI.NS",
         "CUMMINSIND.NS",
         "KEC.NS",
         "KALPATPOWR.NS",
@@ -917,7 +941,7 @@ with c_top2:
     )
 
 selected_price_status = st.multiselect(
-    "🎯 যে প্রাইস রেঞ্জের স্টক অ্যাপে দেখতে চান তা টিক দিন:",
+    "🎯 প্রাইস রেঞ্জ সিলেক্ট করুন:",
     ["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
     default=["🟢 In Range (₹500 - ₹2,000)", "🔴 Above ₹2,000", "🟡 Below ₹500"],
 )
@@ -933,7 +957,7 @@ def fetch_stock_data(ticker, tf_choice):
     if tf_choice == "1 Day (Daily)":
         return stock.history(period="3mo", interval="1d")
     elif tf_choice == "4 Hours (4h)":
-        df = stock.history(period="1mo", interval="1h")
+        df = stock.history(period="2mo", interval="1h")
         if not df.empty:
             df = (
                 df.resample("4h")
@@ -955,18 +979,15 @@ def fetch_stock_data(ticker, tf_choice):
 
 
 def analyze_stock(df):
-    if len(df) < 30:
+    if len(df) < 50:
         return None
 
     c1 = df.iloc[-1]
     c2 = df.iloc[-2]
-    c3 = df.iloc[-3]
     open1, close1, high1, low1 = c1["Open"], c1["Close"], c1["High"], c1["Low"]
     open2, close2, high2, low2 = c2["Open"], c2["Close"], c2["High"], c2["Low"]
-    open3, close3, high3, low3 = c3["Open"], c3["Close"], c3["High"], c3["Low"]
-    vol1 = c1["Volume"]
 
-    # প্রাইস স্ট্যাটাস
+    # প্রাইস ক্যাটাগরি নির্ধারণ
     if close1 < 500:
         price_status = "🟡 Below ₹500"
     elif 500 <= close1 <= 2000:
@@ -982,77 +1003,98 @@ def analyze_stock(df):
     lower_shadow1 = min(open1, close1) - low1
     upper_shadow1 = high1 - max(open1, close1)
 
-    prev_df = df.iloc[-30:-1]
-    recent_low = prev_df["Low"].min()
-    recent_high = prev_df["High"].max()
-    sma_20 = prev_df["Close"].rolling(20).mean().iloc[-1]
-    avg_vol_20 = prev_df["Volume"].mean()
+    # ৫০ দিনের ডেটা ও Higher Low লজিক
+    full_history = df.iloc[-50:]
+    sma_50 = full_history["Close"].mean()
+    recent_low = full_history["Low"].min()
+    recent_high = full_history["High"].max()
 
-    # Higher Low এবং সাপোর্ট / মুভিং এভারেজ চেক (90% একুরেসি লজিক)
-    is_higher_low = low1 >= recent_low * 0.99
-    is_at_support = low1 <= recent_low * 1.015 or close1 >= sma_20 * 0.985
-    is_at_resistance = high1 >= recent_high * 0.992
-
-    # ভলিউম সার্জ (Big Player Entry Check)
-    volume_surge = vol1 >= (avg_vol_20 * 1.2) if avg_vol_20 > 0 else True
-
-    is_green1 = close1 > open1
-    is_red1 = close1 < open1
-    is_red2 = close2 < open2
-    is_green2 = close2 > open2
-    is_red3 = close3 < open3
-    is_green3 = close3 > open3
+    # ট্রেন্ড এবং Higher Low জোন ভ্যালিডেশন
+    is_not_in_heavy_downtrend = close1 >= sma_50 * 0.85
+    is_higher_low = low1 >= recent_low * 0.95 and low1 <= recent_low * 1.15
+    is_at_support = low1 <= recent_low * 1.05 or close1 <= sma_50 * 1.05
+    is_at_resistance = high1 >= recent_high * 0.98
 
     pattern = "⚪ No Pattern"
     type_tag = "None"
 
-    # 🟢 বুলিশ প্যাটার্ন ফিল্টার (Higher Low + Support + Pattern + Volume)
-    if is_at_support and is_higher_low and volume_surge:
+    # 🟢 Higher Low এবং সাপোর্টে আপনার নির্দিষ্ট ক্যান্ডেলস্টিক প্যাটার্নসমূহ
+    if is_not_in_heavy_downtrend and (is_higher_low or is_at_support):
+
+        # ১. Hammer (হ্যামার)
         if (
-            is_red3
-            and (abs(close2 - open2) <= 0.3 * (high2 - low2))
-            and is_green1
-            and (close1 > (open3 + close3) / 2)
-        ):
-            pattern = "🌟 Morning Star (HL + Vol)"
-            type_tag = "Bullish"
-        elif is_red2 and is_green1 and (close1 >= open2) and (open1 <= close2):
-            pattern = "🔥 Bullish Engulfing (HL + Vol)"
-            type_tag = "Bullish"
-        elif (
-            is_green1
+            (close1 > open1)
             and (lower_shadow1 >= 2 * body1)
-            and (upper_shadow1 <= 0.2 * body1)
+            and (upper_shadow1 <= 0.3 * body1)
         ):
-            pattern = "🔨 Green Bullish Hammer (HL)"
-            type_tag = "Bullish"
-        elif (
-            body1 <= 0.1 * range1
-            and lower_shadow1 >= 0.6 * range1
-            and upper_shadow1 <= 0.1 * range1
-        ):
-            pattern = "🐉 Dragonfly Doji (HL)"
+            pattern = "🔨 Bullish Hammer (HL Support)"
             type_tag = "Bullish"
 
-    # 🔴 বেয়ারিশ প্যাটার্ন ফিল্টার (রেজিস্ট্যান্স)
+        # ২. Inverse Hammer (ইনভার্স হ্যামার)
+        elif (
+            (close1 > open1)
+            and (upper_shadow1 >= 2 * body1)
+            and (lower_shadow1 <= 0.3 * body1)
+        ):
+            pattern = "🔨 Inverse Hammer (HL Support)"
+            type_tag = "Bullish"
+
+        # ৩. Bullish Engulfing (বুলিশ এনগাল্ফিং)
+        elif (
+            (c2["Close"] < c2["Open"])
+            and (close1 > open1)
+            and (close1 >= c2["Open"])
+            and (open1 <= c2["Close"])
+        ):
+            pattern = "🔥 Bullish Engulfing (HL Support)"
+            type_tag = "Bullish"
+
+        # ৪. Piercing Line (পিয়ার্সিং লাইন)
+        elif (
+            (c2["Close"] < c2["Open"])
+            and (close1 > open1)
+            and (open1 < c2["Low"])
+            and (close1 >= (c2["Open"] + c2["Close"]) / 2)
+        ):
+            pattern = "⚡ Piercing Line (HL Support)"
+            type_tag = "Bullish"
+
+        # ৫. Dragonfly Doji (ড্রাগনফ্লাই ডোজি)
+        elif (
+            abs(close1 - open1) <= 0.1 * range1
+            and (lower_shadow1 >= 0.6 * range1)
+            and (upper_shadow1 <= 0.1 * range1)
+        ):
+            pattern = "🪲 Dragonfly Doji (HL Support)"
+            type_tag = "Bullish"
+
+        # ৬. Doji (ডোজি)
+        elif (
+            abs(close1 - open1) <= 0.1 * range1
+            and lower_shadow1 >= 0.3 * range1
+            and upper_shadow1 >= 0.3 * range1
+        ):
+            pattern = "➕ Standard Doji (HL Support)"
+            type_tag = "Bullish"
+
+        # ৭. Spinning Top (স্পিনিং টপ)
+        elif (
+            body1 <= 0.3 * range1
+            and lower_shadow1 >= 0.3 * range1
+            and upper_shadow1 >= 0.3 * range1
+        ):
+            pattern = "🌀 Spinning Top (HL Support)"
+            type_tag = "Bullish"
+
+    # 🔴 বেয়ারিশ প্যাটার্ন (রেজিস্ট্যান্সের জন্য)
     if is_at_resistance and type_tag == "None":
         if (
-            is_green3
-            and (abs(close2 - open2) <= 0.3 * (high2 - low2))
-            and is_red1
-            and (close1 < (open3 + close3) / 2)
+            (c2["Close"] > c2["Open"])
+            and (close1 < open1)
+            and (close1 <= c2["Open"])
+            and (open1 >= c2["Close"])
         ):
-            pattern = "🌩️ Evening Star"
-            type_tag = "Bearish"
-        elif is_green2 and is_red1 and (close1 <= open2) and (open1 >= close2):
             pattern = "❄️ Bearish Engulfing"
-            type_tag = "Bearish"
-        elif (
-            is_red1
-            and (upper_shadow1 >= 2 * body1)
-            and (lower_shadow1 <= 0.2 * body1)
-        ):
-            pattern = "🌠 Shooting Star"
             type_tag = "Bearish"
 
     if type_tag == "None":
@@ -1103,8 +1145,8 @@ def render_cards(items):
 
 if start_scan:
     st.write(
-        f"**{selected_category}** সেকশনে **{timeframe_option}** টাইমফ্রেমে"
-        " Higher Low ও প্যাটার্ন স্ক্যান করা হচ্ছে..."
+        f"**{selected_category}** সেকশনে সম্পূর্ণ স্টক লিস্ট এবং Higher Low"
+        " ক্যান্ডেল প্যাটার্ন স্ক্যান করা হচ্ছে..."
     )
 
     bullish_results = []
@@ -1144,12 +1186,14 @@ if start_scan:
 
     with tab_bullish:
         if bullish_results:
-            st.subheader("🟢 Higher Low ও সাপোর্টে তৈরি হওয়া বুলিশ সেটআপ:")
+            st.subheader(
+                "🟢 Higher Low ও সাপোর্টে তৈরি হওয়া বুলিশ প্যাটার্ন সেটআপ:"
+            )
             render_cards(bullish_results)
         else:
             st.info(
-                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে পারফেক্ট"
-                " Higher Low রিভার্সাল পাওয়া যায়নি।"
+                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে এই প্যাটার্নগুলো"
+                " পাওয়া যায়নি।"
             )
 
     with tab_bearish:
@@ -1158,6 +1202,6 @@ if start_scan:
             render_cards(bearish_results)
         else:
             st.info(
-                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে বেয়ারিশ"
-                " সেটআপ পাওয়া যায়নি।"
+                "⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো বেয়ারিশ সেটআপ"
+                " পাওয়া যায়নি।"
             )
