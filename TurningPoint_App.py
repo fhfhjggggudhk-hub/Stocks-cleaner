@@ -527,4 +527,670 @@ def price_checks(d, w, p, nifty=None):
     a_i = float(atr[ai]) if ai is not None and np.isfinite(atr[ai]) else a
 
     # ── সাপ্তাহিক ডেটা
-    wok = w is not None and len(w) >=
+    wok = w is not None and len(w) >= 30
+    w_levels, wl = [], []
+    a_w = rsi_w = None
+    if wok:
+        Ow = w["Open"].to_numpy(float)
+        Hw = w["High"].to_numpy(float)
+        Lw = w["Low"].to_numpy(float)
+        Cw = w["Close"].to_numpy(float)
+        atr_w = _atr(Hw, Lw, Cw)
+        a_w = float(atr_w[-1]) if np.isfinite(atr_w[-1]) else Cw[-1] * 0.03
+        wl, wh = _levels(w, 2, 104)
+        w_levels = _cluster(wl + wh)
+        rsi_w = _rsi(Cw)[-1]
+
+    # ── ৪: ট্রেন্ড (1D + 1W)
+    td = trend_label(C)
+    tmap = {"Uptrend": OK, "Sideways": WARN, "Downtrend": BAD}
+    add("4D", "দৈনিক ট্রেন্ড (1D)", tmap.get(td, NA),
+        f"{td}: EMA20 {e20[-1]:.1f} | EMA50 {e50[-1]:.1f} | দাম {price:.1f}" if td else "ডেটা কম")
+    if wok:
+        tw = trend_label(Cw)
+        add("4W", "সাপ্তাহিক ট্রেন্ড (1W)", tmap.get(tw, NA),
+            f"{tw}: EMA20 {_ema(Cw, 20)[-1]:.1f} | EMA50 {_ema(Cw, 50)[-1]:.1f} | সাপ্তাহিক RSI "
+            + ("—" if rsi_w is None or not np.isfinite(rsi_w) else f"{rsi_w:.0f}"))
+    else:
+        add("4W", "সাপ্তাহিক ট্রেন্ড (1W)", NA, "সাপ্তাহিক ডেটা যথেষ্ট নেই")
+
+    # ── ৫: সাপোর্ট-রেজিস্ট্যান্স
+    dl, dh = _levels(d, 3, 120)
+    d_levels = _cluster(dl + dh)
+    sup_d = max([x for x in d_levels if x < price], default=None)
+    res_d = min([x for x in d_levels if x > price], default=None)
+    sup_w = max([x for x in w_levels if x < price], default=None)
+    res_w = min([x for x in w_levels if x > price], default=None)
+    lv_text = (f"সাপোর্ট: দৈনিক {_fm(sup_d)}, সাপ্তাহিক {_fm(sup_w)} | "
+               f"রেজিস্ট্যান্স: দৈনিক {_fm(res_d)}, সাপ্তাহিক {_fm(res_w)}")
+    if anchor is None:
+        add("5", "সাপোর্ট-রেজিস্ট্যান্স (1D+1W)", NA, "কোনো স্পষ্ট নিচের পয়েন্ট নেই | " + lv_text)
+    else:
+        pl, ph = _levels(d.iloc[:ai - 2], 3, 120) if ai > 12 else ([], [])
+        prior = _cluster(pl + ph)
+        hit_d = any(abs(anchor - x) <= a_i for x in prior)
+        hit_w = any(abs(anchor - x) <= a_i for x in w_levels)
+        st5 = OK if hit_w else (WARN if hit_d else BAD)
+        where = "সাপ্তাহিক জোনে" if hit_w else ("দৈনিক জোনে" if hit_d else "কোনো পুরনো জোনে নয়")
+        add("5", "সাপোর্ট-রেজিস্ট্যান্স (1D+1W)", st5, f"{src} ₹{anchor:.1f} {where} টিকেছে | " + lv_text)
+
+    # ── ৬: ফিবোনাচি + EMA + RSI
+    fib = fib_info(d, 3, a_i)
+    fib_sig = bool(fib and fib["near"])
+    near20 = anchor is not None and abs(anchor - e20[ai]) <= a_i
+    near50 = anchor is not None and abs(anchor - e50[ai]) <= a_i
+    ema_sig = bool(near20 or near50)
+    lo, hi2 = (max(0, ai - 3), min(n, ai + 4)) if ai is not None else (max(0, n - 10), n)
+    rw = rsi[lo:hi2]
+    rsi_min = float(np.nanmin(rw)) if np.isfinite(rw).any() else None
+    rsi_sig = rsi_min is not None and rsi_min < 40
+    cnt = int(fib_sig) + int(ema_sig) + int(rsi_sig)
+    fib_txt = ("Fib: স্পষ্ট swing নেই" if not fib else
+               f"Fib পুলব্যাক {fib['retr'] * 100:.0f}%" + (f" (≈{'/'.join(str(r) for r in fib['near'])})" if fib["near"] else ""))
+    ema_txt = "EMA: " + ("+".join(x for x, f in (("20", near20), ("50", near50)) if f) + " সাপোর্ট" if ema_sig else "কাছে নয়")
+    rsi_txt = "RSI: " + ("—" if rsi_min is None else f"সর্বনিম্ন {rsi_min:.0f}" + (" (<40 ✔)" if rsi_sig else ""))
+    add("6", "ফিবোনাচি + EMA + RSI", OK if cnt >= 2 else (WARN if cnt == 1 else BAD),
+        f"{cnt}/3 | {fib_txt} | {ema_txt} | {rsi_txt}")
+
+    # ── ৭: ভলিউম
+    base = None
+    if ai is not None:
+        pre = V[max(0, ai - 22):max(1, ai - 2)]
+        base = float(pre.mean()) if len(pre) >= 5 else float(V[:max(ai, 1)].mean())
+    if ai is None or not base or base <= 0:
+        add("7", "ভলিউম অ্যানালাইসিস", NA, "সাপোর্ট পয়েন্ট/ভলিউম ডেটা নেই")
+    else:
+        near_v = V[max(0, ai - 3):max(ai, 1)]  # সাপোর্টে পৌঁছানোর আগের ৩ ক্যান্ডেল (বিক্রির চাপ)
+        after = V[ai + 1:]
+        dry = near_v.mean() <= 0.9 * base
+        bounce = len(after) > 0 and after.mean() >= base
+        add("7", "ভলিউম অ্যানালাইসিস", OK if (dry and bounce) else (WARN if (dry or bounce) else BAD),
+            f"সাপোর্টে ভলিউম গড়ের {near_v.mean() / base * 100:.0f}% ({'শুকিয়েছে' if dry else 'শুকায়নি'})"
+            + (f" | বাউন্সে {after.mean() / base * 100:.0f}% ({'বাড়ছে' if bounce else 'বাড়েনি'})" if len(after) else ""))
+
+    # ── ৮: এন্ট্রি ক্যান্ডেল (দৈনিক) + সাপ্তাহিক ক্যান্ডেল
+    pat = plow = trig = None
+    if ai is not None:
+        for j in range(ai, min(ai + 4, n)):
+            f = bullish_shape(O, H, L, C, j, loose=True)
+            if f and abs(f[1] - anchor) <= a_i:
+                pat, plow, trig = f[0], f[1], j
+                break
+    wpat = None
+    if wok:
+        f = bullish_shape(Ow, Hw, Lw, Cw, len(w) - 1, loose=True)
+        if f and any(abs(f[1] - x) <= a_w for x in wl):
+            wpat = f[0]
+    if ai is None:
+        add("8", "এন্ট্রি ক্যান্ডেল সিগন্যাল", NA, "সাপোর্ট পয়েন্ট নেই")
+    else:
+        add("8", "এন্ট্রি ক্যান্ডেল সিগন্যাল",
+            OK if (pat and pat != "➕ Doji") else (WARN if (pat or wpat) else BAD),
+            (f"দৈনিক: {pat}" if pat else "দৈনিক: কোনো বুলিশ প্যাটার্ন নেই")
+            + (f" | সাপ্তাহিক: {wpat}" if wpat else ""))
+
+    # ── ১৪: স্মার্ট মানি ভলিউম স্পাইক
+    idx = trig if trig is not None else ai
+    if idx is None or idx < 6:
+        add("14", "স্মার্ট মানি ভলিউম স্পাইক", NA, "ডেটা নেই")
+    else:
+        b20 = V[max(0, idx - 20):idx].mean()
+        ratio = V[idx] / b20 if b20 > 0 else 0
+        add("14", "স্মার্ট মানি ভলিউম স্পাইক", OK if ratio >= 1.8 else (WARN if ratio >= 1.3 else BAD),
+            f"সিগন্যাল-ক্যান্ডেলে ভলিউম ২০-দিনের গড়ের {ratio:.1f}x")
+
+    # ── ১৫: প্যানিক অ্যাবজর্পশন (খবর পড়া যায় না, দাম-ভলিউম থেকে আন্দাজ)
+    if ai is None or not base:
+        add("15", "প্যানিক অ্যাবজর্পশন (আন্দাজ)", NA, "ডেটা নেই")
+    else:
+        rngc = H[ai] - L[ai]
+        wick = (min(O[ai], C[ai]) - L[ai]) / rngc if rngc > 0 else 0
+        wick_sig = wick >= 0.4
+        absorb_sig = V[ai] >= 1.2 * base and C[ai] >= (H[ai] + L[ai]) / 2
+        panic_txt, panic_ok = "", None
+        if nifty is not None and len(nifty) > 10:
+            try:
+                jn = pd.concat([_ret_by_date(d), _ret_by_date(nifty)], axis=1, keys=["s", "n"]).dropna().tail(10)
+                pdays = jn[jn["n"] <= -0.01]
+                if len(pdays):
+                    panic_ok = bool((pdays["s"] > pdays["n"]).all() and price >= anchor)
+                    panic_txt = f" | বাজার-পতনের {len(pdays)} দিনে স্টক {'বাজারের চেয়ে ভালো ছিল' if panic_ok else 'দুর্বল ছিল'}"
+            except Exception:  # noqa: BLE001
+                pass
+        if panic_ok or (wick_sig and absorb_sig):
+            s15 = OK
+        elif panic_ok is False:
+            s15 = BAD
+        elif wick_sig or absorb_sig:
+            s15 = WARN
+        else:
+            s15 = BAD
+        add("15", "প্যানিক অ্যাবজর্পশন (আন্দাজ)", s15,
+            f"নিচের উইক {wick * 100:.0f}%{' ✔' if wick_sig else ''} | ভলিউম-শোষণ {'হ্যাঁ' if absorb_sig else 'না'}{panic_txt}"
+            " | (আসল খবর পড়া যায় না)")
+
+    # ── ৯ ও ১০: ট্রেড সেটআপ, R:R
+    setup = None
+    if anchor is not None:
+        entry = price
+        sl = min(anchor, plow if plow is not None else anchor) - 0.2 * a_i
+        risk = entry - sl
+        if risk > 0:
+            res_all = sorted(set(x for x in d_levels + w_levels if x > entry + 0.5 * risk))
+            t1 = res_all[0] if res_all else entry + 2 * risk
+            t2 = next((x for x in res_all if x >= t1 + 0.5 * risk), entry + 3 * risk)
+            if t2 <= t1:
+                t2 = t1 + risk
+            setup = dict(entry=entry, sl=sl, t1=t1, t2=t2, rr1=(t1 - entry) / risk, rr2=(t2 - entry) / risk,
+                         risk_pct=risk / entry * 100, t_2r=entry + 2 * risk, src=src, pattern=pat)
+    if setup is None:
+        add("10", "রিস্ক-টু-রিওয়ার্ড", NA, "বৈধ এন্ট্রি/স্টপ-লস তৈরি হয়নি")
+    else:
+        rr = setup["rr1"]
+        extra = "" if rr >= 2 else f" | ১:২ চাইলে ₹{setup['t_2r']:.1f} পর্যন্ত বাধা-মুক্ত জায়গা লাগবে"
+        add("10", "রিস্ক-টু-রিওয়ার্ড", OK if rr >= 2 else (WARN if rr >= 1.5 else BAD),
+            f"Entry {setup['entry']:.1f} | SL {setup['sl']:.1f} | T1 {setup['t1']:.1f} (১:{rr:.2f}) | "
+            f"T2 {setup['t2']:.1f} (১:{setup['rr2']:.2f}){extra}")
+
+    return dict(checks=checks, setup=setup, anchor=anchor, src=src, pattern=pat, weekly_pattern=wpat,
+                score=score_checks(checks), confluence=confluence(checks),
+                levels=dict(support=sup_d, resistance=res_d, w_support=sup_w, w_resistance=res_w))
+
+
+def score_checks(checks):
+    num = den = 0.0
+    for c in checks:
+        w = WEIGHTS.get(c["id"])
+        if w is None or c["status"] not in POINTS:
+            continue
+        num += w * POINTS[c["status"]]
+        den += w
+    return round(100 * num / den) if den else None
+
+
+def confluence(checks):
+    known = [c for c in checks if c["id"] in WEIGHTS and c["status"] != NA]
+    return sum(c["status"] == OK for c in known), len(known)
+
+
+def decide(checks, setup, score, event_status, global_status):
+    s = {c["id"]: c["status"] for c in checks}
+    blockers = []
+    if s.get("4D") == BAD:
+        blockers.append("দৈনিক ট্রেন্ড নিম্নমুখী")
+    if s.get("4W") == BAD:
+        blockers.append("সাপ্তাহিক ট্রেন্ড নিম্নমুখী")
+    if setup is None:
+        blockers.append("স্পষ্ট Higher Low/সাপোর্ট পাওয়া যায়নি")
+    elif s.get("10") == BAD:
+        blockers.append("R:R ১:১.৫-এর নিচে")
+    if blockers:
+        return "avoid", "❌ এখন বাদ দিন", blockers
+    waits = []
+    if s.get("8") != OK:
+        waits.append("দৈনিক বুলিশ ক্যান্ডেলের কনফার্মেশন নেই")
+    if s.get("10") != OK:
+        waits.append("R:R ১:২ নয়")
+    if event_status == BAD:
+        waits.append("১ সপ্তাহের মধ্যে ইভেন্ট আছে")
+    if global_status == BAD:
+        waits.append("গ্লোবাল ঝুঁকি বেশি")
+    if score is not None and score < 65:
+        waits.append(f"স্কোর কম ({score})")
+    if waits:
+        return "wait", "⏳ অপেক্ষা করুন", waits
+    return "take", "✅ ৩-৭ দিনের সুইং ট্রেড যুক্তিসঙ্গত", []
+
+
+# ── শুধু ডিপ-অ্যানালাইসিসে (এক-একটি স্টকের জন্য) ডেটা আনা পয়েন্টগুলো
+def check_fundamentals(info):
+    info = info or {}
+    de, prom = info.get("debtToEquity"), info.get("heldPercentInsiders")
+    if de is None and prom is None:
+        return NA, "ফান্ডামেন্টাল ডেটা পাওয়া যায়নি (Screener.in-এ নিজে দেখুন)"
+    notes, bad, warn = [], False, False
+    if de is not None:
+        notes.append(f"ঋণ/ইক্যুইটি {de / 100:.2f}")
+        bad |= de > 200
+        warn |= de > 100
+    if prom is not None:
+        notes.append(f"ইনসাইডার/প্রমোটার হোল্ডিং ~{prom * 100:.0f}%")
+        warn |= prom < 0.25
+    if info.get("sector") == "Financial Services":
+        notes.append("(ব্যাংক/NBFC-তে ঋণ অনুপাত প্রযোজ্য নয়)")
+        bad = False
+    return (BAD if bad else WARN if warn else OK), " | ".join(notes) + " | (ইন্ডিকেটিভ, যাচাই করুন)"
+
+
+def check_events(cal, today):
+    items = []
+    if isinstance(cal, dict):
+        for k, v in cal.items():
+            for x in (v if isinstance(v, (list, tuple)) else [v]):
+                if isinstance(x, date):
+                    items.append((str(k), x.date() if isinstance(x, datetime) else x))
+    if not items:
+        return NA, "ইভেন্টের তারিখ পাওয়া যায়নি; NSE-র কর্পোরেট ক্যালেন্ডার নিজে দেখুন"
+    soon = [(k, x) for k, x in items if 0 <= (x - today).days <= 7]
+    if soon:
+        return BAD, "আগামী ৭ দিনে: " + ", ".join(f"{k} ({x:%d-%b})" for k, x in soon)
+    return OK, "আগামী ৭ দিনে কোনো রেজাল্ট/ডিভিডেন্ড ইভেন্ট পাওয়া যায়নি (ডেটা নিখুঁত নাও হতে পারে)"
+
+
+def check_sector(info, override, nifty):
+    sector = (info or {}).get("sector")
+    idx_t = override or SECTOR_INDEX.get(sector)
+    if not idx_t:
+        return NA, "সেক্টর/ইনডেক্স মেলেনি; ওপর থেকে সেক্টর ইনডেক্স বেছে নিন"
+    raw = download_batch([idx_t], "1y", "1d").get(idx_t)
+    if raw is None or len(raw) < 50:
+        return NA, f"{idx_t} ইনডেক্সের ডেটা পাওয়া যায়নি"
+    C = raw["Close"].dropna().to_numpy(float)
+    tl = trend_label(C)
+    rs_txt = ""
+    if nifty is not None and len(nifty) > 25 and len(C) > 25:
+        rs = (C[-1] / C[-21] - 1) * 100 - (nifty["Close"].iloc[-1] / nifty["Close"].iloc[-21] - 1) * 100
+        rs_txt = f" | ২০ দিনে Nifty-র চেয়ে {rs:+.1f}%"
+    status = {"Uptrend": OK, "Sideways": WARN, "Downtrend": BAD}.get(tl, NA)
+    return status, f"{sector or 'ম্যানুয়াল'} → {idx_t}: {tl}{rs_txt}"
+
+
+def check_global(mk):
+    flags, have = [], False
+
+    def closes(t):
+        df = mk.get(t)
+        return None if df is None or len(df) < 6 else df["Close"].dropna().to_numpy(float)
+
+    ivx, vix, spx, nif = closes("^INDIAVIX"), closes("^VIX"), closes("^GSPC"), closes("^NSEI")
+    if ivx is not None:
+        have = True
+        if ivx[-1] > 20:
+            flags.append(f"India VIX উঁচু ({ivx[-1]:.1f})")
+    if vix is not None:
+        have = True
+        if vix[-1] > 25:
+            flags.append(f"US VIX উঁচু ({vix[-1]:.1f})")
+    if spx is not None:
+        have = True
+        if spx[-1] / spx[-2] - 1 <= -0.02 or spx[-1] / spx[-6] - 1 <= -0.04:
+            flags.append("S&P 500-এ বড় পতন")
+    if nif is not None:
+        have = True
+        if nif[-1] / nif[-2] - 1 <= -0.015:
+            flags.append("Nifty-তে এক দিনে বড় পতন")
+    if not have:
+        return NA, "গ্লোবাল সূচকের ডেটা পাওয়া যায়নি"
+    if not flags:
+        return OK, "India VIX, US VIX, S&P 500, Nifty-তে বড় প্যানিক-সংকেত নেই"
+    return (BAD if len(flags) >= 2 else WARN), " | ".join(flags)
+
+
+def _tick(x):
+    return float(np.round(x / 0.05) * 0.05)
+
+
+def deep_analyze(ticker, params, sector_override=None):
+    cfg_d = TIMEFRAMES["1 Day (Daily)"]
+    raw_d = download_batch([ticker], "1y", "1d").get(ticker)
+    if raw_d is None:
+        return dict(error=f"{ticker}: দৈনিক ডেটা পাওয়া যায়নি (টিকার ঠিক আছে কি?)")
+    d = drop_forming_candle(prepare_frame(raw_d, cfg_d), cfg_d)
+    raw_w = download_batch([ticker], "3y", "1wk").get(ticker)
+    w = drop_forming_weekly(raw_w.dropna(subset=["Open", "High", "Low", "Close"])) if raw_w is not None else None
+    if len(d) < 60:
+        return dict(error=f"{ticker}: বিশ্লেষণের জন্য যথেষ্ট দৈনিক ডেটা নেই")
+    mk = download_batch(["^NSEI", "^INDIAVIX", "^GSPC", "^VIX"], "6mo", "1d")
+    nifty = None
+    if mk.get("^NSEI") is not None:
+        nifty = drop_forming_candle(prepare_frame(mk["^NSEI"], cfg_d), cfg_d)
+
+    pc = price_checks(d, w, params, nifty)
+    checks = list(pc["checks"])
+    today = datetime.now(IST).date()
+
+    info, cal = {}, None
+    try:
+        tk = yf.Ticker(ticker)
+        try:
+            info = tk.info or {}
+        except Exception:  # noqa: BLE001
+            info = {}
+        try:
+            cal = tk.calendar
+        except Exception:  # noqa: BLE001
+            cal = None
+    except Exception:  # noqa: BLE001
+        pass
+
+    s1, t1 = check_fundamentals(info)
+    checks.append(dict(id="1", title="ফান্ডামেন্টাল সেফটি", status=s1, detail=t1))
+    s2, t2 = check_events(cal, today)
+    checks.append(dict(id="2", title="ইভেন্ট রিস্ক (১ সপ্তাহ)", status=s2, detail=t2))
+    s3, t3 = check_sector(info, sector_override, nifty)
+    checks.append(dict(id="3", title="সেক্টর ট্রেন্ড", status=s3, detail=t3))
+    s13, t13 = check_global(mk)
+    risk_flag = s2 == BAD or s13 in (BAD, WARN)
+    wd = datetime.now(IST).weekday()
+    if risk_flag and wd >= 4:
+        timing = "শুক্রবার ক্লোজিংয়ে এন্ট্রি নয়; সোমবার বাজার খোলার পর পরিস্থিতি দেখে সিদ্ধান্ত নিন।"
+    elif risk_flag:
+        timing = "ইভেন্ট/গ্লোবাল ঝুঁকি কেটে যাওয়ার পর এন্ট্রি বিবেচনা করুন।"
+    else:
+        timing = "বিশেষ ঝুঁকি-সংকেত নেই; স্বাভাবিক এন্ট্রি-প্ল্যান চলতে পারে।"
+    checks.append(dict(id="13", title="ইভেন্ট ও গ্লোবাল রিস্ক, এন্ট্রি টাইমিং", status=s13, detail=t13 + " | " + timing))
+
+    checks.sort(key=lambda c: ORDER.index(c["id"]))
+    score = score_checks(checks)
+    kind, verdict, reasons = decide(checks, pc["setup"], score, s2, s13)
+    return dict(ticker=ticker, d=d, checks=checks, setup=pc["setup"], score=score, confluence=confluence(checks),
+                verdict_kind=kind, verdict=verdict, reasons=reasons, timing=timing, levels=pc["levels"],
+                pattern=pc["pattern"], anchor=pc["anchor"])
+
+
+# ───────────────────────── স্ক্যান ও ফলাফল ─────────────────────────
+def chart_links(ticker):
+    sym = ticker.replace(".NS", "")
+    tv = sym.replace("&", "_").replace("-", "_")
+    return (f"https://in.tradingview.com/chart/?symbol=NSE%3A{quote(tv, safe='')}",
+            f"https://groww.in/search?q={quote(sym, safe='')}")
+
+
+def make_row(ticker, res):
+    sym = ticker.replace(".NS", "")
+    tv, groww = chart_links(ticker)
+    row = {
+        "_t": ticker, "Weekly": "—", "_w_up": None, "_w_hl": None, "Support": "—",
+        "Score": np.nan, "Confluence": "", "Entry": np.nan, "SL": np.nan, "T1": np.nan, "T2": np.nan, "R:R": np.nan,
+        "Stock": sym, "Price": res["price"], "Status": res["status"],
+        "Trend": "✅ Uptrend" if res["up"] else "—", "_up": res["up"],
+        "Pattern": res["sr_pattern"] or "", "Type": res["sr_type"] or "",
+        "Buyer %": res["buyer"], "Seller %": res["seller"],
+        "Chart": tv, "Groww": groww,
+        "_has_hl": res["hl"] is not None, "Candle at HL": res["hl_pattern"] or "",
+    }
+    hl = res["hl"]
+    if hl:
+        t = hl["time"]
+        row.update({
+            "HL Price": round(hl["hl"], 2), "Prev Low": round(hl["prev"], 2),
+            "HL Time": t.strftime("%d-%b-%Y") if hasattr(t, "strftime") else str(t),
+            "Candles Ago": hl["age"], "Dist %": round(hl["dist"], 2), "HL Count": hl["count"],
+            "Stop": hl["stop"], "Risk %": hl["risk_pct"], "Target 1:2": hl["target"],
+            "Support": hl["support"],
+        })
+    return row
+
+
+def apply_quick(r, pc):
+    r["Score"] = pc["score"] if pc["score"] is not None else np.nan
+    ok, tot = pc["confluence"]
+    r["Confluence"] = f"{ok}/{tot}"
+    st_ = pc["setup"]
+    if st_:
+        r.update({"Entry": round(st_["entry"], 2), "SL": round(st_["sl"], 2), "T1": round(st_["t1"], 2),
+                  "T2": round(st_["t2"], 2), "R:R": round(st_["rr1"], 2)})
+
+
+def run_scan(tickers, tf, params, include_forming):
+    cfg = TIMEFRAMES[tf]
+    chunks = [tickers[i:i + BATCH_SIZE] for i in range(0, len(tickers), BATCH_SIZE)]
+    rows, failed, errors, frames = [], [], [], {}
+    scanned = 0
+    prog = st.progress(0.0, text="স্ক্যান শুরু হচ্ছে...")
+    for ci, chunk in enumerate(chunks):
+        data = download_batch(chunk, cfg["period"], cfg["interval"])
+        for t in chunk:
+            raw = data.get(t)
+            if raw is None:
+                failed.append(t)
+                continue
+            try:
+                df = prepare_frame(raw, cfg)
+                if not include_forming:
+                    df = drop_forming_candle(df, cfg)
+                if len(df) < 30:
+                    failed.append(t)
+                    continue
+                scanned += 1
+                res = analyze_stock(df, params)
+                if res:
+                    rows.append(make_row(t, res))
+                    frames[t] = df
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{t}: {type(e).__name__}: {e}")
+        prog.progress((ci + 1) / len(chunks),
+                      text=f"{ci + 1}/{len(chunks)} ব্যাচ শেষ | স্ক্যান: {scanned} | সেটআপ পাওয়া গেছে: {len(rows)}")
+        time.sleep(0.3)
+    # সাপ্তাহিক ট্রেন্ড: শুধু যে স্টকে সিগন্যাল মিলেছে তাদের জন্য
+    by_t = {r["_t"]: r for r in rows}
+    sig = list(by_t)
+    prog.progress(1.0, text=f"সাপ্তাহিক ট্রেন্ড যাচাই হচ্ছে ({len(sig)} স্টক)...")
+    for i in range(0, len(sig), BATCH_SIZE):
+        chunk = sig[i:i + BATCH_SIZE]
+        wdata = download_batch(chunk, "3y", "1wk")
+        ddata = download_batch(chunk, "1y", "1d") if cfg["weekly"] else {}
+        for t in chunk:
+            r = by_t[t]
+            flags = None
+            wclosed = None
+            if wdata.get(t) is not None:
+                try:
+                    wclosed = drop_forming_weekly(wdata[t].dropna(subset=["Open", "High", "Low", "Close"]))
+                    flags = weekly_flags(wdata[t])
+                except Exception:  # noqa: BLE001
+                    flags = None
+            try:
+                if cfg["weekly"]:  # স্কোর সবসময় দৈনিক + সাপ্তাহিক মিলিয়ে
+                    dcl = None
+                    if ddata.get(t) is not None:
+                        dcfg = TIMEFRAMES["1 Day (Daily)"]
+                        dcl = drop_forming_candle(prepare_frame(ddata[t]), dcfg)
+                else:
+                    dcl = frames[t]
+                if dcl is not None and len(dcl) >= 60:
+                    apply_quick(r, price_checks(dcl, wclosed, params, None))
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{t} (স্কোর): {type(e).__name__}: {e}")
+            if flags is None:
+                r["Weekly"] = "ডেটা নেই"
+            else:
+                r["_w_up"], r["_w_hl"] = flags
+                r["Weekly"] = ("W-Uptrend ✅" if flags[0] else "W-Uptrend ✖") + " | " + ("W-HL ✅" if flags[1] else "W-HL ✖")
+    prog.empty()
+    st.session_state["scan"] = dict(
+        rows=rows, failed=failed, errors=errors, scanned=scanned, total=len(tickers),
+        tf=tf, time=datetime.now(IST).strftime("%d-%b-%Y %H:%M IST"),
+    )
+
+
+HL_COLS = ["Stock", "Price", "Trend", "Weekly", "HL Price", "Prev Low", "HL Time", "Candles Ago", "Dist %",
+           "HL Count", "Candle at HL", "Support", "Score", "Confluence", "SL", "T1", "T2", "R:R", "Chart", "Groww"]
+SR_COLS = ["Stock", "Price", "Trend", "Weekly", "Pattern", "Score", "Buyer %", "Seller %", "Chart", "Groww"]
+
+
+def show_table(df, cols, key):
+    if df.empty:
+        st.info("⚠️ এই ফিল্টারে এখন কোনো স্টক পাওয়া যায়নি।")
+        return
+    st.dataframe(
+        df[cols], hide_index=True,
+        column_config={
+            "Chart": st.column_config.LinkColumn("Chart", display_text="📈 খুলুন"),
+            "Groww": st.column_config.LinkColumn("Groww", display_text="🚀 খুলুন"),
+        },
+    )
+    st.download_button("⬇️ CSV ডাউনলোড", df[cols].drop(columns=["Chart", "Groww"]).to_csv(index=False).encode("utf-8"),
+                       file_name=f"{key}.csv", mime="text/csv", key=f"dl_{key}")
+
+
+def show_results(price_sel, only_up, weekly_mode):
+    s = st.session_state["scan"]
+    st.success(f"স্ক্যানিং সম্পন্ন! {s['scanned']}/{s['total']} স্টক | {s['tf']} | {s['time']}")
+    df = pd.DataFrame(s["rows"])
+    if not df.empty:
+        df = df[df["Status"].isin(price_sel)]
+        if only_up:
+            df = df[df["_up"]]
+        if weekly_mode in (W_UP, W_BOTH):
+            df = df[df["_w_up"] == True]  # noqa: E712
+        if weekly_mode in (W_HL, W_BOTH):
+            df = df[df["_w_hl"] == True]  # noqa: E712
+
+    if df.empty:
+        hl_pat = hl_all = bull = bear = df
+    else:
+        hl_all = df[df["_has_hl"]].sort_values(["Score", "HL Count"], ascending=[False, False])
+        hl_pat = hl_all[hl_all["Candle at HL"] != ""]
+        bull = df[df["Type"] == "Bullish"].sort_values("Buyer %", ascending=False)
+        bear = df[df["Type"] == "Bearish"].sort_values("Seller %", ascending=False)
+
+    t1, t2, t3, t4 = st.tabs([
+        f"⭐ HL + Candle ({len(hl_pat)})", f"📈 Higher Low ({len(hl_all)})",
+        f"🟢 Support Bullish ({len(bull)})", f"🔴 Resistance Bearish ({len(bear)})",
+    ])
+    with t1:
+        st.caption("Higher Low-এর নিচের পয়েন্টে ক্যান্ডেল প্যাটার্নও মিলেছে। Support কলামে দেখুন HL কোথায় টিকেছে। Stop = HL-এর Low।")
+        show_table(hl_pat, HL_COLS, "hl_candle")
+    with t2:
+        st.caption("Higher Low তৈরি হয়েছে (ক্যান্ডেল প্যাটার্ন থাকতেও পারে, না-ও পারে)।")
+        show_table(hl_all, HL_COLS, "higher_low")
+    with t3:
+        show_table(bull, SR_COLS, "support_bullish")
+    with t4:
+        show_table(bear, SR_COLS, "resistance_bearish")
+
+    if s["failed"]:
+        with st.expander(f"⚠️ ডেটা না পাওয়া / কম ডেটার স্টক ({len(s['failed'])})"):
+            st.write(", ".join(t.replace('.NS', '') for t in s["failed"]))
+    if s["errors"]:
+        with st.expander(f"❗ এরর ({len(s['errors'])})"):
+            st.write("\n".join(s["errors"][:50]))
+
+
+def draw_chart(rep):
+    d = rep["d"].tail(90)
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure(go.Candlestick(x=d.index, open=d["Open"], high=d["High"], low=d["Low"], close=d["Close"]))
+        lines = []
+        s = rep["setup"]
+        if s:
+            lines += [("SL", s["sl"], "red"), ("T1", s["t1"], "green"), ("T2", s["t2"], "green")]
+        lv = rep["levels"]
+        for k, name in (("support", "S(D)"), ("resistance", "R(D)"), ("w_support", "S(W)"), ("w_resistance", "R(W)")):
+            if lv.get(k):
+                lines.append((name, lv[k], "gray"))
+        for name, y, col in lines:
+            fig.add_hline(y=y, line_dash="dot", line_color=col, annotation_text=f"{name} {y:.1f}")
+        fig.update_layout(xaxis_rangeslider_visible=False, height=420, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig)
+    except Exception:  # noqa: BLE001
+        e = rep["d"]["Close"].tail(90)
+        st.line_chart(pd.DataFrame({"Close": e, "EMA20": _ema(e.to_numpy(float), 20), "EMA50": _ema(e.to_numpy(float), 50)}, index=e.index))
+
+
+def render_deep(rep):
+    if rep.get("error"):
+        st.error(rep["error"])
+        return
+    box = {"take": st.success, "wait": st.warning, "avoid": st.error}[rep["verdict_kind"]]
+    box(f"**{rep['ticker'].replace('.NS', '')} — {rep['verdict']}**"
+        + (": " + "; ".join(rep["reasons"]) if rep["reasons"] else ""))
+    ok, tot = rep["confluence"]
+    s = rep["setup"]
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("সেটআপ স্কোর", f"{rep['score']}/100" if rep["score"] is not None else "—")
+    m2.metric("কনফ্লুয়েন্স", f"{ok}/{tot}")
+    m3.metric("R:R (T1)", f"1:{s['rr1']:.2f}" if s else "—")
+    m4.metric("ঝুঁকি", f"{s['risk_pct']:.1f}%" if s else "—")
+    st.caption("এটি নিয়মভিত্তিক স্কোর, জেতার সম্ভাবনা (probability %) নয়।")
+    st.dataframe(pd.DataFrame([{"#": c["id"], "বিষয়": c["title"], "ফল": c["status"], "বিবরণ": c["detail"]}
+                               for c in rep["checks"]]), hide_index=True)
+    if s:
+        st.markdown("**ট্রেড সেটআপ (৩-৭ দিনের হোল্ড)**")
+        st.dataframe(pd.DataFrame([{
+            "Entry": round(_tick(s["entry"]), 2), "Stop-Loss": round(_tick(s["sl"]), 2),
+            "Target 1": round(_tick(s["t1"]), 2), "Target 2": round(_tick(s["t2"]), 2),
+            "R:R (T1)": round(s["rr1"], 2), "R:R (T2)": round(s["rr2"], 2),
+        }]), hide_index=True)
+    st.info("⏰ এন্ট্রি টাইমিং: " + rep["timing"])
+    draw_chart(rep)
+    st.caption("ফান্ডামেন্টাল, ইভেন্ট ও সেক্টর ডেটা Yahoo থেকে আসে, কখনো অসম্পূর্ণ/ভুল হতে পারে। শুধু শিক্ষামূলক, আর্থিক পরামর্শ নয়।")
+
+
+# ───────────────────────── UI ─────────────────────────
+def main():
+    st.set_page_config(page_title="AI Stock Screener Pro", layout="wide")
+    st.title("⚡ AI Stock Screener Pro (সব NSE স্টক স্ক্যানার)")
+    st.caption("Higher Low + ক্যান্ডেলস্টিক প্যাটার্ন। একবারে সব স্টক স্ক্যান হয়। শুধু শিক্ষামূলক, আর্থিক পরামর্শ নয়।")
+
+    with st.sidebar:
+        st.header("⚙️ Higher Low সেটিংস")
+        n = st.slider("Swing শক্তি (n ক্যান্ডেল দু'পাশে)", 2, 6, 3)
+        max_age = st.slider("HL কতগুলো ক্যান্ডেল আগে পর্যন্ত", 3, 30, 10)
+        max_dist = st.slider("দাম HL থেকে সর্বোচ্চ কত % উপরে", 1.0, 15.0, 5.0, 0.5)
+        min_rise = st.slider("HL পুরনো লো থেকে কমপক্ষে কত % উঁচু", 0.1, 3.0, 0.3, 0.1)
+        min_swing = st.slider("দুই লো-এর মাঝে কমপক্ষে কত % উঠা", 0.5, 8.0, 1.0, 0.5)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        universe = st.selectbox("স্টক তালিকা:", [UNI_ALL, UNI_BUILTIN, UNI_UPLOAD])
+    with c2:
+        tf = st.selectbox("ক্যান্ডেল টাইমফ্রেম:", list(TIMEFRAMES.keys()))
+    uploaded = None
+    if universe == UNI_UPLOAD:
+        uploaded = st.file_uploader("টিকার ফাইল (প্রতি লাইনে একটি, যেমন RELIANCE)", type=["txt", "csv"])
+
+    price_sel = st.multiselect("🎯 কোন প্রাইস রেঞ্জের স্টক দেখতে চান:", [STATUS_MID, STATUS_HIGH, STATUS_LOW],
+                               default=[STATUS_MID, STATUS_HIGH, STATUS_LOW])
+    weekly_mode = st.selectbox(
+        "📅 সাপ্তাহিক (Weekly) ফিল্টার:", [W_UP, W_HL, W_BOTH, W_OFF],
+        help="স্ক্যানের পরেও এটি বদলালে আবার স্ক্যান করতে হয় না।",
+    )
+    c3, c4, c5 = st.columns(3)
+    with c3:
+        only_up = st.checkbox("শুধু Uptrend (EMA20 > EMA50, দাম EMA50-এর উপরে)", value=False)
+    with c4:
+        include_forming = st.checkbox("চলমান (অসম্পূর্ণ) ক্যান্ডেলও গণনা করুন", value=False)
+    with c5:
+        min_vol = st.number_input("ন্যূনতম গড় ভলিউম (শেষ ২০ ক্যান্ডেল)", min_value=0, value=100000, step=50000)
+
+    params = dict(n=n, max_age=max_age, max_dist=max_dist, min_rise=min_rise,
+                  min_swing=min_swing, min_vol=min_vol)
+    if st.button("🔍 স্ক্যান শুরু করুন", type="primary"):
+        tickers = load_universe(universe, uploaded)
+        if not tickers:
+            st.error("কোনো টিকার পাওয়া যায়নি।")
+        else:
+            run_scan(tickers, tf, params, include_forming)
+
+    if "scan" in st.session_state:
+        show_results(price_sel, only_up, weekly_mode)
+
+    st.divider()
+    st.subheader("🧪 ডিপ অ্যানালাইসিস (১৫-পয়েন্ট চেকলিস্ট, Daily + Weekly)")
+    st.caption("একটি স্টক বেছে নিন বা টিকার লিখুন। ফান্ডামেন্টাল, ইভেন্ট, সেক্টর, গ্লোবাল রিস্কসহ পুরো রিপোর্ট আসবে।")
+    names = []
+    if "scan" in st.session_state:
+        names = list(dict.fromkeys(r["Stock"] for r in st.session_state["scan"]["rows"]))
+    c6, c7 = st.columns(2)
+    with c6:
+        pick = st.selectbox("স্ক্যান-ফলাফল থেকে বাছুন:", ["—"] + names)
+    with c7:
+        typed = st.text_input("অথবা NSE টিকার লিখুন (যেমন TCS):")
+    sector_label = st.selectbox("সেক্টর ইনডেক্স (ঐচ্ছিক):", list(SECTOR_CHOICES))
+    if st.button("🧪 বিশ্লেষণ করুন"):
+        sym = typed.strip().upper() or (pick if pick != "—" else "")
+        if not sym:
+            st.warning("একটি স্টক বাছুন বা টিকার লিখুন।")
+        else:
+            with st.spinner("বিশ্লেষণ চলছে..."):
+                st.session_state["deep"] = deep_analyze(sym if sym.endswith(".NS") else sym + ".NS",
+                                                        params, SECTOR_CHOICES[sector_label])
+    if "deep" in st.session_state:
+        render_deep(st.session_state["deep"])
+
+
+if __name__ == "__main__":
+    main()
