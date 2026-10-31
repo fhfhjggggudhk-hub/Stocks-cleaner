@@ -1,6 +1,7 @@
 """
 ⚡ AI Stock Screener Pro — NSE All-Stock Scanner
-  * Higher Low (HL) + HL-এ ক্যান্ডেল প্যাটার্ন (⭐ সবচেয়ে মজবুত সেটআপ)
+  * Higher Low (HL) + HL-এর নিচের পয়েন্টে ক্যান্ডেল প্যাটার্ন (⭐ সবচেয়ে মজবুত সেটআপ)
+  * সাপ্তাহিক (Weekly) ট্রেন্ড ফিল্টার + দৈনিক (Daily) HL/এন্ট্রি
   * সাপোর্টে বুলিশ / রেজিস্ট্যান্সে বেয়ারিশ ক্যান্ডেল প্যাটার্ন
   * একবারে সব NSE স্টক, ব্যাচে ডাউনলোড (দ্রুত), শুধু বন্ধ হয়ে যাওয়া ক্যান্ডেল বিশ্লেষণ
 
@@ -36,6 +37,12 @@ TIMEFRAMES = {
 STATUS_MID = "🟢 In Range (₹500 - ₹2,000)"
 STATUS_HIGH = "🔴 Above ₹2,000"
 STATUS_LOW = "🟡 Below ₹500"
+
+W_OFF = "বন্ধ (ফিল্টার নেই)"
+W_UP = "Weekly Uptrend (EMA20 > EMA50)"
+W_HL = "Weekly Higher Low"
+W_BOTH = "Weekly Uptrend + Higher Low"
+WEEKLY_HL_PARAMS = dict(n=2, min_rise_pct=1.0, min_swing_pct=3.0, max_age=8, max_dist_pct=30.0)
 
 UNI_ALL = "সব NSE স্টক (অটো ডাউনলোড)"
 UNI_BUILTIN = "বাছাই করা লিকুইড স্টক (বিল্ট-ইন)"
@@ -174,6 +181,14 @@ def _swing_lows(L, n):
     return idx
 
 
+def _swing_highs(H, n):
+    idx = []
+    for i in range(n, len(H) - n):
+        if H[i] > H[i - n:i].max() and H[i] >= H[i + 1:i + n + 1].max():
+            idx.append(i)
+    return idx
+
+
 def check_higher_low(df, n=3, min_rise_pct=0.3, min_swing_pct=1.0, max_age=10, max_dist_pct=5.0):
     """df = শুধু বন্ধ-হওয়া ক্যান্ডেল। Higher Low পেলে dict, নাহলে None।"""
     if len(df) < 2 * n + 10:
@@ -211,7 +226,7 @@ def check_higher_low(df, n=3, min_rise_pct=0.3, min_swing_pct=1.0, max_age=10, m
 
 
 # ───────────────────────── ক্যান্ডেল প্যাটার্ন ─────────────────────────
-def bullish_shape(O, H, L, C, j):
+def bullish_shape(O, H, L, C, j, loose=False):
     """j-তম ক্যান্ডেলে শেষ হওয়া বুলিশ প্যাটার্ন → (নাম, প্যাটার্নের সর্বনিম্ন Low) বা None।"""
     if j < 2:
         return None
@@ -231,12 +246,18 @@ def bullish_shape(O, H, L, C, j):
         return "🔥 Bullish Engulfing", min(l1, l2)
     if r2 and g1 and o1 < c2 and c1 > (o2 + c2) / 2 and c1 < o2:
         return "⚡ Piercing Line", min(l1, l2)
-    if g1 and b1 > 0 and lower1 >= 2 * b1 and upper1 <= 0.2 * b1:
-        return "🔨 Green Hammer", l1
+    if r2 and g1 and abs(l1 - l2) <= 0.1 * rng1 and b2 > 0:
+        return "🪜 Tweezer Bottom", min(l1, l2)
+    if r2 and g1 and o1 > c2 and c1 < o2 and b2 >= 0.5 * (h2 - l2):
+        return "🤰 Bullish Harami", min(l1, l2)
+    if b1 > 0 and lower1 >= 2 * b1 and upper1 <= 0.2 * b1:
+        return ("🔨 Green Hammer" if g1 else "🔨 Hammer (Red)"), l1
     if g1 and b1 > 0 and upper1 >= 2 * b1 and lower1 <= 0.2 * b1:
         return "🙃 Inverted Hammer", l1
     if b1 <= 0.1 * rng1 and lower1 >= 0.6 * rng1 and upper1 <= 0.1 * rng1:
         return "🐉 Dragonfly Doji", l1
+    if loose and b1 <= 0.1 * rng1:
+        return "➕ Doji", l1
     return None
 
 
@@ -311,10 +332,21 @@ def analyze_stock(df, p):
     if hl:
         i2 = hl["idx"]
         for j in range(i2, min(i2 + 4, n)):
-            found = bullish_shape(O, H, L, C, j)
+            found = bullish_shape(O, H, L, C, j, loose=True)
             if found and abs(found[1] - hl["hl"]) <= tol(j, 1.0):
                 res["hl_pattern"] = found[0]
                 break
+        # HL কোন সাপোর্টে টিকেছে?
+        a = tol(i2, 2.0)  # = 1 ATR
+        zones = []
+        if abs(hl["hl"] - ema20[i2]) <= a:
+            zones.append("EMA20")
+        if abs(hl["hl"] - ema50[i2]) <= a:
+            zones.append("EMA50")
+        old_highs = [H[k] for k in _swing_highs(H[:i2 - 2], 3)]
+        if any(abs(hl["hl"] - h) <= a for h in old_highs):
+            zones.append("পুরনো রেজিস্ট্যান্স")
+        hl["support"] = " + ".join(zones) if zones else "—"
         stop = hl["hl"]
         risk = price - stop
         hl.update(stop=round(stop, 2), risk_pct=round(risk / price * 100, 2),
@@ -339,6 +371,32 @@ def analyze_stock(df, p):
     return res
 
 
+# ───────────────────────── সাপ্তাহিক ট্রেন্ড ─────────────────────────
+def drop_forming_weekly(df):
+    """চলতি সপ্তাহ শুক্রবার ১৫:৩০-এর আগে পর্যন্ত অসম্পূর্ণ; সেটি বাদ দেয়।"""
+    if df.empty:
+        return df
+    last = df.index[-1]
+    if last.tzinfo is None:
+        last = last.tz_localize(IST)
+    monday = last.normalize() - pd.Timedelta(days=last.weekday())
+    end = monday + pd.Timedelta(days=4) + MARKET_CLOSE
+    return df if end <= datetime.now(IST) else df.iloc[:-1]
+
+
+def weekly_flags(df):
+    """(weekly_uptrend, weekly_higher_low) অথবা None।"""
+    df = drop_forming_weekly(df.dropna(subset=["Open", "High", "Low", "Close"]))
+    if len(df) < 30:
+        return None
+    C = df["Close"].to_numpy(float)
+    ema20 = pd.Series(C).ewm(span=20, adjust=False).mean().to_numpy()
+    ema50 = pd.Series(C).ewm(span=50, adjust=False).mean().to_numpy()
+    up = bool(C[-1] > ema50[-1] and ema20[-1] > ema50[-1])
+    hl = check_higher_low(df, **WEEKLY_HL_PARAMS) is not None
+    return up, hl
+
+
 # ───────────────────────── স্ক্যান ও ফলাফল ─────────────────────────
 def chart_links(ticker):
     sym = ticker.replace(".NS", "")
@@ -351,6 +409,7 @@ def make_row(ticker, res):
     sym = ticker.replace(".NS", "")
     tv, groww = chart_links(ticker)
     row = {
+        "_t": ticker, "Weekly": "—", "_w_up": None, "_w_hl": None, "Support": "—",
         "Stock": sym, "Price": res["price"], "Status": res["status"],
         "Trend": "✅ Uptrend" if res["up"] else "—", "_up": res["up"],
         "Pattern": res["sr_pattern"] or "", "Type": res["sr_type"] or "",
@@ -366,6 +425,7 @@ def make_row(ticker, res):
             "HL Time": t.strftime("%d-%b %H:%M") if hasattr(t, "strftime") else str(t),
             "Candles Ago": hl["age"], "Dist %": round(hl["dist"], 2), "HL Count": hl["count"],
             "Stop": hl["stop"], "Risk %": hl["risk_pct"], "Target 1:2": hl["target"],
+            "Support": hl["support"],
         })
     return row
 
@@ -399,6 +459,26 @@ def run_scan(tickers, tf, params, include_forming):
         prog.progress((ci + 1) / len(chunks),
                       text=f"{ci + 1}/{len(chunks)} ব্যাচ শেষ | স্ক্যান: {scanned} | সেটআপ পাওয়া গেছে: {len(rows)}")
         time.sleep(0.3)
+    # সাপ্তাহিক ট্রেন্ড: শুধু যে স্টকে সিগন্যাল মিলেছে তাদের জন্য
+    by_t = {r["_t"]: r for r in rows}
+    sig = list(by_t)
+    prog.progress(1.0, text=f"সাপ্তাহিক ট্রেন্ড যাচাই হচ্ছে ({len(sig)} স্টক)...")
+    for i in range(0, len(sig), BATCH_SIZE):
+        chunk = sig[i:i + BATCH_SIZE]
+        wdata = download_batch(chunk, "2y", "1wk")
+        for t in chunk:
+            r = by_t[t]
+            flags = None
+            if wdata.get(t) is not None:
+                try:
+                    flags = weekly_flags(wdata[t])
+                except Exception:  # noqa: BLE001
+                    flags = None
+            if flags is None:
+                r["Weekly"] = "ডেটা নেই"
+            else:
+                r["_w_up"], r["_w_hl"] = flags
+                r["Weekly"] = ("W-Uptrend ✅" if flags[0] else "W-Uptrend ✖") + " | " + ("W-HL ✅" if flags[1] else "W-HL ✖")
     prog.empty()
     st.session_state["scan"] = dict(
         rows=rows, failed=failed, errors=errors, scanned=scanned, total=len(tickers),
@@ -406,9 +486,9 @@ def run_scan(tickers, tf, params, include_forming):
     )
 
 
-HL_COLS = ["Stock", "Price", "Trend", "HL Price", "Prev Low", "HL Time", "Candles Ago", "Dist %",
-           "HL Count", "Candle at HL", "Stop", "Risk %", "Target 1:2", "Chart", "Groww"]
-SR_COLS = ["Stock", "Price", "Trend", "Pattern", "Buyer %", "Seller %", "Chart", "Groww"]
+HL_COLS = ["Stock", "Price", "Trend", "Weekly", "HL Price", "Prev Low", "HL Time", "Candles Ago", "Dist %",
+           "HL Count", "Candle at HL", "Support", "Stop", "Risk %", "Target 1:2", "Chart", "Groww"]
+SR_COLS = ["Stock", "Price", "Trend", "Weekly", "Pattern", "Buyer %", "Seller %", "Chart", "Groww"]
 
 
 def show_table(df, cols, key):
@@ -426,7 +506,7 @@ def show_table(df, cols, key):
                        file_name=f"{key}.csv", mime="text/csv", key=f"dl_{key}")
 
 
-def show_results(price_sel, only_up):
+def show_results(price_sel, only_up, weekly_mode):
     s = st.session_state["scan"]
     st.success(f"স্ক্যানিং সম্পন্ন! {s['scanned']}/{s['total']} স্টক | {s['tf']} | {s['time']}")
     df = pd.DataFrame(s["rows"])
@@ -434,6 +514,10 @@ def show_results(price_sel, only_up):
         df = df[df["Status"].isin(price_sel)]
         if only_up:
             df = df[df["_up"]]
+        if weekly_mode in (W_UP, W_BOTH):
+            df = df[df["_w_up"] == True]  # noqa: E712
+        if weekly_mode in (W_HL, W_BOTH):
+            df = df[df["_w_hl"] == True]  # noqa: E712
 
     if df.empty:
         hl_pat = hl_all = bull = bear = df
@@ -448,7 +532,7 @@ def show_results(price_sel, only_up):
         f"🟢 Support Bullish ({len(bull)})", f"🔴 Resistance Bearish ({len(bear)})",
     ])
     with t1:
-        st.caption("Higher Low তৈরি হওয়ার জায়গায় বুলিশ ক্যান্ডেল প্যাটার্নও মিলেছে। Stop = HL-এর Low।")
+        st.caption("Higher Low-এর নিচের পয়েন্টে ক্যান্ডেল প্যাটার্নও মিলেছে। Support কলামে দেখুন HL কোথায় টিকেছে। Stop = HL-এর Low।")
         show_table(hl_pat, HL_COLS, "hl_candle")
     with t2:
         st.caption("Higher Low তৈরি হয়েছে (ক্যান্ডেল প্যাটার্ন থাকতেও পারে, না-ও পারে)।")
@@ -491,6 +575,10 @@ def main():
 
     price_sel = st.multiselect("🎯 কোন প্রাইস রেঞ্জের স্টক দেখতে চান:", [STATUS_MID, STATUS_HIGH, STATUS_LOW],
                                default=[STATUS_MID, STATUS_HIGH, STATUS_LOW])
+    weekly_mode = st.selectbox(
+        "📅 সাপ্তাহিক (Weekly) ফিল্টার:", [W_UP, W_HL, W_BOTH, W_OFF],
+        help="স্ক্যানের পরেও এটি বদলালে আবার স্ক্যান করতে হয় না।",
+    )
     c3, c4, c5 = st.columns(3)
     with c3:
         only_up = st.checkbox("শুধু Uptrend (EMA20 > EMA50, দাম EMA50-এর উপরে)", value=False)
@@ -509,7 +597,7 @@ def main():
             run_scan(tickers, tf, params, include_forming)
 
     if "scan" in st.session_state:
-        show_results(price_sel, only_up)
+        show_results(price_sel, only_up, weekly_mode)
 
 
 if __name__ == "__main__":
