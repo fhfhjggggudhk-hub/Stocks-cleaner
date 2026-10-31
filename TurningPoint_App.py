@@ -2,16 +2,17 @@
 ⚡ AI Stock Screener Pro — NSE All-Stock Scanner
   * Higher Low (HL) + HL-এর নিচের পয়েন্টে ক্যান্ডেল প্যাটার্ন (⭐ সবচেয়ে মজবুত সেটআপ)
   * সাপ্তাহিক (Weekly) ট্রেন্ড ফিল্টার + দৈনিক (Daily) HL/এন্ট্রি
+  * 🧪 ডিপ অ্যানালাইসিস: ১৫-পয়েন্ট চেকলিস্ট, এন্ট্রি/SL/টার্গেট, R:R, স্কোর ও সিদ্ধান্ত
   * সাপোর্টে বুলিশ / রেজিস্ট্যান্সে বেয়ারিশ ক্যান্ডেল প্যাটার্ন
   * একবারে সব NSE স্টক, ব্যাচে ডাউনলোড (দ্রুত), শুধু বন্ধ হয়ে যাওয়া ক্যান্ডেল বিশ্লেষণ
 
-Run:  TurningPoint_app.py
+Run:  streamlit run app.py
 এটি শুধু শিক্ষামূলক টুল, আর্থিক পরামর্শ নয়।
 """
 import io
 import re
 import time
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -28,10 +29,8 @@ BATCH_SIZE = 100
 NSE_EQUITY_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
 
 TIMEFRAMES = {
-    "1 Day (Daily)": dict(period="6mo", interval="1d", resample=None, delta=pd.Timedelta(days=1)),
-    "4 Hours (4h)": dict(period="3mo", interval="1h", resample="4h", delta=pd.Timedelta(hours=4)),
-    "1 Hour (1h)": dict(period="3mo", interval="1h", resample=None, delta=pd.Timedelta(hours=1)),
-    "15 Minutes (15m)": dict(period="1mo", interval="15m", resample=None, delta=pd.Timedelta(minutes=15)),
+    "1 Day (Daily)": dict(period="1y", interval="1d", weekly=False),
+    "1 Week (Weekly)": dict(period="3y", interval="1wk", weekly=True),
 }
 
 STATUS_MID = "🟢 In Range (₹500 - ₹2,000)"
@@ -149,26 +148,20 @@ def download_batch(tickers, period, interval):
     return {}
 
 
-def prepare_frame(df, cfg):
-    df = df.dropna(subset=["Open", "High", "Low", "Close"])
-    if cfg["resample"] and not df.empty:
-        # NSE ৯:১৫ থেকে শুরু, তাই ৪-ঘণ্টার ক্যান্ডেল ৯:১৫ ও ১৩:১৫ থেকে
-        df = (
-            df.resample(cfg["resample"], offset="9h15min")
-            .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
-            .dropna(subset=["Open"])
-        )
-    return df
+def prepare_frame(df, cfg=None):
+    return df.dropna(subset=["Open", "High", "Low", "Close"])
 
 
 def drop_forming_candle(df, cfg):
-    """বাজার চলাকালীন তৈরি হওয়া অসম্পূর্ণ শেষ ক্যান্ডেল বাদ দেয়।"""
+    """চলমান (অসম্পূর্ণ) শেষ ক্যান্ডেল বাদ দেয়: দৈনিক = ১৫:৩০-এর আগে, সাপ্তাহিক = শুক্রবার ১৫:৩০-এর আগে।"""
     if df.empty:
         return df
+    if cfg.get("weekly"):
+        return drop_forming_weekly(df)
     last = df.index[-1]
     if last.tzinfo is None:
         last = last.tz_localize(IST)
-    end = min(last + cfg["delta"], last.normalize() + MARKET_CLOSE)
+    end = last.normalize() + MARKET_CLOSE
     return df if end <= datetime.now(IST) else df.iloc[:-1]
 
 
@@ -397,110 +390,139 @@ def weekly_flags(df):
     return up, hl
 
 
-# ───────────────────────── স্ক্যান ও ফলাফল ─────────────────────────
-def chart_links(ticker):
-    sym = ticker.replace(".NS", "")
-    tv = sym.replace("&", "_").replace("-", "_")
-    return (f"https://in.tradingview.com/chart/?symbol=NSE%3A{quote(tv, safe='')}",
-            f"https://groww.in/search?q={quote(sym, safe='')}")
+# ───────────────────────── ইন্ডিকেটর ও ১৫-পয়েন্ট বিশ্লেষণ ─────────────────────────
+OK, WARN, BAD, NA = "✅", "⚠️", "❌", "❓"
+
+SECTOR_INDEX = {  # yfinance সেক্টর → NSE ইনডেক্স (আনুমানিক ম্যাপিং; ইচ্ছেমতো বদলান)
+    "Technology": "^CNXIT", "Financial Services": "^NSEBANK", "Healthcare": "^CNXPHARMA",
+    "Energy": "^CNXENERGY", "Consumer Defensive": "^CNXFMCG", "Consumer Cyclical": "^CNXAUTO",
+    "Basic Materials": "^CNXMETAL", "Industrials": "^CNXINFRA", "Real Estate": "^CNXREALTY",
+    "Utilities": "^CNXENERGY", "Communication Services": "^CNXMEDIA",
+}
+SECTOR_CHOICES = {
+    "অটো (কোম্পানির সেক্টর থেকে)": None, "IT": "^CNXIT", "Bank": "^NSEBANK", "Pharma": "^CNXPHARMA",
+    "Energy": "^CNXENERGY", "FMCG": "^CNXFMCG", "Auto": "^CNXAUTO", "Metal": "^CNXMETAL",
+    "Infra": "^CNXINFRA", "Realty": "^CNXREALTY", "Media": "^CNXMEDIA",
+}
+WEIGHTS = {"4D": 14, "4W": 14, "5": 12, "6": 12, "7": 10, "8": 14, "10": 14, "14": 5, "15": 5, "1": 6, "3": 8}
+POINTS = {OK: 1.0, WARN: 0.5, BAD: 0.0}
+ORDER = ["1", "2", "3", "4D", "4W", "5", "6", "7", "8", "10", "13", "14", "15"]
 
 
-def make_row(ticker, res):
-    sym = ticker.replace(".NS", "")
-    tv, groww = chart_links(ticker)
-    row = {
-        "_t": ticker, "Weekly": "—", "_w_up": None, "_w_hl": None, "Support": "—",
-        "Stock": sym, "Price": res["price"], "Status": res["status"],
-        "Trend": "✅ Uptrend" if res["up"] else "—", "_up": res["up"],
-        "Pattern": res["sr_pattern"] or "", "Type": res["sr_type"] or "",
-        "Buyer %": res["buyer"], "Seller %": res["seller"],
-        "Chart": tv, "Groww": groww,
-        "_has_hl": res["hl"] is not None, "Candle at HL": res["hl_pattern"] or "",
-    }
-    hl = res["hl"]
+def _ema(x, span):
+    return pd.Series(x).ewm(span=span, adjust=False).mean().to_numpy()
+
+
+def _atr(H, L, C, period=14):
+    pc = np.roll(C, 1)
+    pc[0] = C[0]
+    tr = np.maximum.reduce([H - L, np.abs(H - pc), np.abs(L - pc)])
+    return pd.Series(tr).rolling(period, min_periods=5).mean().to_numpy()
+
+
+def _rsi(C, period=14):
+    delta = np.diff(C, prepend=C[0])
+    gain = pd.Series(np.where(delta > 0, delta, 0.0)).ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    loss = pd.Series(np.where(delta < 0, -delta, 0.0)).ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = 100 - 100 / (1 + rs)
+    rsi[(loss == 0) & gain.notna()] = 100.0
+    return rsi.to_numpy()
+
+
+def _fm(x):
+    return "—" if x is None else f"{x:,.1f}"
+
+
+def trend_label(C):
+    if len(C) < 30:
+        return None
+    e20, e50 = _ema(C, 20), _ema(C, 50)
+    if C[-1] > e50[-1] and e20[-1] > e50[-1]:
+        return "Uptrend"
+    if C[-1] < e50[-1] and e20[-1] < e50[-1]:
+        return "Downtrend"
+    return "Sideways"
+
+
+def _cluster(levels, tol_pct=0.6):
+    groups = []
+    for lv in sorted(levels):
+        if groups and abs(lv - groups[-1][-1]) / groups[-1][-1] * 100 <= tol_pct:
+            groups[-1].append(lv)
+        else:
+            groups.append([lv])
+    return [float(np.mean(g)) for g in groups]
+
+
+def _levels(df, n, lookback):
+    """(swing-low স্তর, swing-high স্তর) — কাছাকাছিগুলো মিলিয়ে।"""
+    d = df.tail(lookback)
+    if len(d) < 2 * n + 3:
+        return [], []
+    L = d["Low"].to_numpy(float)
+    H = d["High"].to_numpy(float)
+    lows = [float(L[i]) for i in _swing_lows(L, n)] + [float(L.min())]
+    highs = [float(H[i]) for i in _swing_highs(H, n)] + [float(H.max())]
+    return _cluster(lows), _cluster(highs)
+
+
+def fib_info(df, n, atr_val):
+    H = df["High"].to_numpy(float)
+    L = df["Low"].to_numpy(float)
+    sh = _swing_highs(H, n)
+    if not sh:
+        return None
+    hi = sh[-1]
+    before = [i for i in _swing_lows(L, n) if i < hi]
+    if not before:
+        return None
+    A, B = float(L[before[-1]]), float(H[hi])
+    if B <= A:
+        return None
+    pull = float(L[hi:].min())
+    levels = {r: B - r * (B - A) for r in (0.382, 0.5, 0.618)}
+    tol = max(0.75 * atr_val, 0.003 * pull)
+    near = [r for r, v in levels.items() if abs(pull - v) <= tol]
+    return dict(A=A, B=B, pull=pull, retr=(B - pull) / (B - A), levels=levels, near=near)
+
+
+def _ret_by_date(df):
+    s = pd.Series(df["Close"].to_numpy(float), index=[x.date() for x in df.index])
+    return s.pct_change()
+
+
+def price_checks(d, w, p, nifty=None):
+    """শুধু দাম/ভলিউম-ভিত্তিক পয়েন্টগুলো (৪, ৫, ৬, ৭, ৮, ৯, ১০, ১৪, ১৫)।
+    d = বন্ধ-হওয়া দৈনিক ক্যান্ডেল, w = বন্ধ-হওয়া সাপ্তাহিক ক্যান্ডেল (বা None)।"""
+    n = len(d)
+    O, H, L, C = (d[c].to_numpy(float) for c in ("Open", "High", "Low", "Close"))
+    V = d["Volume"].fillna(0).to_numpy(float)
+    atr = _atr(H, L, C)
+    a = float(atr[-1]) if np.isfinite(atr[-1]) else C[-1] * 0.01
+    e20, e50 = _ema(C, 20), _ema(C, 50)
+    rsi = _rsi(C)
+    price = float(C[-1])
+    checks = []
+
+    def add(i, title, status, detail):
+        checks.append(dict(id=i, title=title, status=status, detail=detail))
+
+    # ── অ্যাঙ্কর: Higher Low (না থাকলে সাম্প্রতিক swing low)
+    hl = check_higher_low(d, p["n"], p["min_rise"], p["min_swing"], p["max_age"], p["max_dist"])
+    ai = anchor = None
+    src = ""
     if hl:
-        t = hl["time"]
-        row.update({
-            "HL Price": round(hl["hl"], 2), "Prev Low": round(hl["prev"], 2),
-            "HL Time": t.strftime("%d-%b %H:%M") if hasattr(t, "strftime") else str(t),
-            "Candles Ago": hl["age"], "Dist %": round(hl["dist"], 2), "HL Count": hl["count"],
-            "Stop": hl["stop"], "Risk %": hl["risk_pct"], "Target 1:2": hl["target"],
-            "Support": hl["support"],
-        })
-    return row
+        ai, anchor, src = hl["idx"], hl["hl"], "Higher Low"
+    else:
+        cand = [i for i in _swing_lows(L, p["n"]) if i >= n - 30]
+        if cand:
+            ai, anchor, src = cand[-1], float(L[cand[-1]]), "সর্বশেষ Swing Low (HL শর্ত পূরণ হয়নি)"
+    a_i = float(atr[ai]) if ai is not None and np.isfinite(atr[ai]) else a
 
-
-def run_scan(tickers, tf, params, include_forming):
-    cfg = TIMEFRAMES[tf]
-    chunks = [tickers[i:i + BATCH_SIZE] for i in range(0, len(tickers), BATCH_SIZE)]
-    rows, failed, errors = [], [], []
-    scanned = 0
-    prog = st.progress(0.0, text="স্ক্যান শুরু হচ্ছে...")
-    for ci, chunk in enumerate(chunks):
-        data = download_batch(chunk, cfg["period"], cfg["interval"])
-        for t in chunk:
-            raw = data.get(t)
-            if raw is None:
-                failed.append(t)
-                continue
-            try:
-                df = prepare_frame(raw, cfg)
-                if not include_forming:
-                    df = drop_forming_candle(df, cfg)
-                if len(df) < 30:
-                    failed.append(t)
-                    continue
-                scanned += 1
-                res = analyze_stock(df, params)
-                if res:
-                    rows.append(make_row(t, res))
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"{t}: {type(e).__name__}: {e}")
-        prog.progress((ci + 1) / len(chunks),
-                      text=f"{ci + 1}/{len(chunks)} ব্যাচ শেষ | স্ক্যান: {scanned} | সেটআপ পাওয়া গেছে: {len(rows)}")
-        time.sleep(0.3)
-    # সাপ্তাহিক ট্রেন্ড: শুধু যে স্টকে সিগন্যাল মিলেছে তাদের জন্য
-    by_t = {r["_t"]: r for r in rows}
-    sig = list(by_t)
-    prog.progress(1.0, text=f"সাপ্তাহিক ট্রেন্ড যাচাই হচ্ছে ({len(sig)} স্টক)...")
-    for i in range(0, len(sig), BATCH_SIZE):
-        chunk = sig[i:i + BATCH_SIZE]
-        wdata = download_batch(chunk, "2y", "1wk")
-        for t in chunk:
-            r = by_t[t]
-            flags = None
-            if wdata.get(t) is not None:
-                try:
-                    flags = weekly_flags(wdata[t])
-                except Exception:  # noqa: BLE001
-                    flags = None
-            if flags is None:
-                r["Weekly"] = "ডেটা নেই"
-            else:
-                r["_w_up"], r["_w_hl"] = flags
-                r["Weekly"] = ("W-Uptrend ✅" if flags[0] else "W-Uptrend ✖") + " | " + ("W-HL ✅" if flags[1] else "W-HL ✖")
-    prog.empty()
-    st.session_state["scan"] = dict(
-        rows=rows, failed=failed, errors=errors, scanned=scanned, total=len(tickers),
-        tf=tf, time=datetime.now(IST).strftime("%d-%b-%Y %H:%M IST"),
-    )
-
-
-HL_COLS = ["Stock", "Price", "Trend", "Weekly", "HL Price", "Prev Low", "HL Time", "Candles Ago", "Dist %",
-           "HL Count", "Candle at HL", "Support", "Stop", "Risk %", "Target 1:2", "Chart", "Groww"]
-SR_COLS = ["Stock", "Price", "Trend", "Weekly", "Pattern", "Buyer %", "Seller %", "Chart", "Groww"]
-
-
-def show_table(df, cols, key):
-    if df.empty:
-        st.info("⚠️ এই ফিল্টারে এখন কোনো স্টক পাওয়া যায়নি।")
-        return
-    st.dataframe(
-        df[cols], hide_index=True,
-        column_config={
-            "Chart": st.column_config.LinkColumn("Chart", display_text="📈 খুলুন"),
-            "Groww": st.column_config.LinkColumn("Groww", display_text="🚀 খুলুন"),
-        },
-    )
-    st.download_button("⬇️ CSV ডাউনলোড", df[cols].drop(columns=["Chart", "Groww"]).to_csv(index=False).encode("utf-8"),
-                       file_na
+    # ── সাপ্তাহিক ডেটা
+    wok = w is not None and len(w) >= 30
+    w_levels, wl = [], []
+    a_w = rsi_w = None
+    if wok:
+        Ow, Hw, Lw, Cw = (w[c].to_numpy(float)
