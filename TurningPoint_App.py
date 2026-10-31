@@ -295,7 +295,10 @@ def analyze_stock(df, p):
     n = len(df)
     if n < 30:
         return None
-    O, H, L, C = (df[c].to_numpy(float) for c in ("Open", "High", "Low", "Close"))
+    O = df["Open"].to_numpy(float)
+    H = df["High"].to_numpy(float)
+    L = df["Low"].to_numpy(float)
+    C = df["Close"].to_numpy(float)
     vol = df["Volume"].fillna(0).to_numpy(float) if "Volume" in df else np.zeros(n)
     if vol[-20:].mean() < p["min_vol"]:
         return None
@@ -496,7 +499,10 @@ def price_checks(d, w, p, nifty=None):
     """শুধু দাম/ভলিউম-ভিত্তিক পয়েন্টগুলো (৪, ৫, ৬, ৭, ৮, ৯, ১০, ১৪, ১৫)।
     d = বন্ধ-হওয়া দৈনিক ক্যান্ডেল, w = বন্ধ-হওয়া সাপ্তাহিক ক্যান্ডেল (বা None)।"""
     n = len(d)
-    O, H, L, C = (d[c].to_numpy(float) for c in ("Open", "High", "Low", "Close"))
+    O = d["Open"].to_numpy(float)
+    H = d["High"].to_numpy(float)
+    L = d["Low"].to_numpy(float)
+    C = d["Close"].to_numpy(float)
     V = d["Volume"].fillna(0).to_numpy(float)
     atr = _atr(H, L, C)
     a = float(atr[-1]) if np.isfinite(atr[-1]) else C[-1] * 0.01
@@ -521,8 +527,4 @@ def price_checks(d, w, p, nifty=None):
     a_i = float(atr[ai]) if ai is not None and np.isfinite(atr[ai]) else a
 
     # ── সাপ্তাহিক ডেটা
-    wok = w is not None and len(w) >= 30
-    w_levels, wl = [], []
-    a_w = rsi_w = None
-    if wok:
-        Ow, Hw, Lw, Cw = (w[c].to_numpy(float)
+    wok = w is not None and len(w) >=
