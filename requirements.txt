@@ -5,4 +5,13 @@ plotly
 yfinance
 pandas
 streamlit
-kronos_requirements_add.txt
+numpy
+pandas
+torch
+einops
+huggingface_hub
+safetensors
+tqdm
+matplotlib
+streamlit
+yfinance
