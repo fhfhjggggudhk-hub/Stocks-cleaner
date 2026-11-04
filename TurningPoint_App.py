@@ -1,4 +1,6 @@
+import glob
 import io
+import os
 
 import pandas as pd
 import requests
@@ -55,15 +57,41 @@ def load_bse_api():
 
 
 def bse_from_csv(file):
-    df = pd.read_csv(file)
-    df.columns = [c.strip() for c in df.columns]
-    code = next(c for c in df.columns if "code" in c.lower())
-    sid = next(c for c in df.columns if c.lower() in ("security id", "scrip id", "scrip_id"))
-    return [
-        {"code": str(int(a)), "id": str(b).strip()}
-        for a, b in zip(df[code], df[sid])
-        if pd.notna(a) and pd.notna(b)
-    ]
+    df = pd.read_csv(file, dtype=str, encoding="utf-8-sig", on_bad_lines="skip")
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # Security Code কলাম: যে কলামের প্রায় সব মান ৬ অঙ্কের সংখ্যা
+    code_col = None
+    for c in df.columns:
+        vals = df[c].dropna().astype(str).str.strip()
+        if len(vals) and vals.str.fullmatch(r"\d{6}").mean() > 0.9:
+            code_col = c
+            break
+    if code_col is None:
+        raise ValueError("Security Code কলাম পাওয়া যায়নি")
+
+    # Security Id কলাম
+    sid_col = None
+    for c in df.columns:
+        if c.lower() in ("security id", "scrip id", "scrip_id", "securityid"):
+            sid_col = c
+            break
+    if sid_col is None:
+        for c in df.columns:
+            lc = c.lower()
+            if "id" in lc and "isin" not in lc:
+                sid_col = c
+                break
+    if sid_col is None:
+        raise ValueError("Security Id কলাম পাওয়া যায়নি")
+
+    out = []
+    for a, b in zip(df[code_col], df[sid_col]):
+        if pd.notna(a) and pd.notna(b):
+            a, b = str(a).strip(), str(b).strip()
+            if len(a) == 6 and a.isdigit() and b:
+                out.append({"code": a, "id": b})
+    return out
 
 
 # ------------------------------------------------------------------ ফিল্টার ও সিলেক্টর
@@ -74,6 +102,10 @@ except Exception as e:
     st.stop()
 
 with st.expander("🏦 BSE স্টক যোগ করুন (যেসব স্টক NSE-তে নেই)"):
+    st.caption(
+        "BSE-র তালিকা অটো না এলে: bseindia.com → Market Data → Equity → List of Scrips,"
+        " Segment: Equity, Status: Active বেছে Submit চাপুন, তারপর CSV ডাউনলোড করে নিচে আপলোড করুন।"
+    )
     use_bse = st.checkbox("BSE-র স্টকও স্ক্যান করুন", value=False)
     bse_file = st.file_uploader("BSE তালিকার CSV (অটো না এলে)", type="csv")
 
@@ -85,6 +117,15 @@ if use_bse:
             bse_rows = bse_from_csv(bse_file)
         except Exception as e:
             st.warning(f"BSE CSV পড়া যায়নি: {e}")
+    if bse_rows is None:  # রিপোজিটরিতে রাখা BSE ফাইল থাকলে সেটা নিজে থেকে নেবে
+        base = os.path.dirname(os.path.abspath(__file__))
+        for fn in sorted(glob.glob(os.path.join(base, "*quity*.csv")) + glob.glob(os.path.join(base, "bse_list.csv"))):
+            try:
+                bse_rows = bse_from_csv(fn)
+                st.caption(f"BSE তালিকা রিপোজিটরির ফাইল থেকে নেওয়া হয়েছে: {os.path.basename(fn)}")
+                break
+            except Exception:
+                pass
     if bse_rows is None:
         try:
             bse_rows = load_bse_api()
@@ -92,11 +133,16 @@ if use_bse:
             st.warning(f"BSE তালিকা অটো আনা যায়নি ({e}). উপরে CSV আপলোড করুন।")
             bse_rows = []
     nse_names = {x["name"] for x in nse_list}
-    universe += [
+    bse_only = [
         {"name": r["id"], "ticker": f"{r['code']}.BO", "ex": "BSE"}
         for r in bse_rows
         if r["id"] not in nse_names
     ]
+    universe += bse_only
+    if bse_only:
+        st.success(f"BSE থেকে {len(bse_only)}টি অতিরিক্ত স্টক যোগ হয়েছে (যেগুলো NSE-তে নেই)।")
+    else:
+        st.error("BSE-র কোনো স্টক যোগ হয়নি। উপরের নিয়মে CSV আপলোড করুন।")
 
 total = len(universe)
 parts = [
@@ -111,7 +157,7 @@ with c_top1:
 with c_top2:
     timeframe_option = st.selectbox(
         "ক্যান্ডেল টাইমফ্রেম (Timeframe):",
-        ["1 Day (Daily)", "4 Hours (4h)", "1 Hour (1h)", "15 Minutes (15m)"],
+        ["1 Day (Daily)", "1 Week (Weekly)"],
     )
 
 selected_price_status = st.multiselect(
@@ -128,12 +174,8 @@ start_scan = st.button("🔍 স্ক্যান শুরু করুন", u
 def fetch_batch(tickers: tuple, tf_choice: str):
     if tf_choice == "1 Day (Daily)":
         period, interval = "3mo", "1d"
-    elif tf_choice == "4 Hours (4h)":
-        period, interval = "1mo", "1h"
-    elif tf_choice == "1 Hour (1h)":
-        period, interval = "1mo", "1h"
     else:
-        period, interval = "5d", "15m"
+        period, interval = "2y", "1wk"
     raw = yf.download(
         list(tickers), period=period, interval=interval,
         group_by="ticker", auto_adjust=True, threads=True, progress=False,
@@ -143,13 +185,6 @@ def fetch_batch(tickers: tuple, tf_choice: str):
         try:
             d = raw[t] if isinstance(raw.columns, pd.MultiIndex) else raw
             d = d[["Open", "High", "Low", "Close", "Volume"]].dropna()
-            if tf_choice == "4 Hours (4h)" and not d.empty:
-                d = (
-                    d.resample("4h")
-                    .agg({"Open": "first", "High": "max", "Low": "min",
-                          "Close": "last", "Volume": "sum"})
-                    .dropna()
-                )
             if not d.empty:
                 res[t] = d
         except Exception:
