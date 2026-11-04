@@ -106,7 +106,7 @@ with st.expander("🏦 BSE স্টক যোগ করুন (যেসব স
         "BSE-র তালিকা অটো না এলে: bseindia.com → Market Data → Equity → List of Scrips,"
         " Segment: Equity, Status: Active বেছে Submit চাপুন, তারপর CSV ডাউনলোড করে নিচে আপলোড করুন।"
     )
-    use_bse = st.checkbox("BSE-র স্টকও স্ক্যান করুন", value=False)
+    use_bse = st.checkbox("শুধু BSE-র স্টক স্ক্যান করুন (টিক দিলে NSE বন্ধ)", value=False)
     bse_file = st.file_uploader("BSE তালিকার CSV (অটো না এলে)", type="csv")
 
 universe = list(nse_list)
@@ -138,11 +138,13 @@ if use_bse:
         for r in bse_rows
         if r["id"] not in nse_names
     ]
-    universe += bse_only
     if bse_only:
-        st.success(f"BSE থেকে {len(bse_only)}টি অতিরিক্ত স্টক যোগ হয়েছে (যেগুলো NSE-তে নেই)।")
+        universe = bse_only  # BSE চালু থাকলে শুধু BSE-র স্টক, NSE বন্ধ
+        st.success(
+            f"শুধু BSE মোড চালু: {len(bse_only)}টি BSE স্টক (যেগুলো NSE-তে নেই) স্ক্যান হবে। NSE স্টক এখন বন্ধ।"
+        )
     else:
-        st.error("BSE-র কোনো স্টক যোগ হয়নি। উপরের নিয়মে CSV আপলোড করুন।")
+        st.error("BSE-র কোনো স্টক পাওয়া যায়নি, তাই আপাতত NSE দেখানো হচ্ছে। উপরের নিয়মে CSV আপলোড করুন।")
 
 total = len(universe)
 parts = [
@@ -414,4 +416,3 @@ if start_scan:
             render_cards(bearish_results)
         else:
             st.info("⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে বেয়ারিশ রিভার্সাল পাওয়া যায়নি।")
-                
