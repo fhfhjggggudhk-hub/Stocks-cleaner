@@ -57,7 +57,7 @@ def load_bse_api():
 
 
 def bse_from_csv(file):
-    df = pd.read_csv(file, dtype=str, encoding="utf-8-sig", on_bad_lines="skip")
+    df = pd.read_csv(file, dtype=str, encoding="utf-8-sig", on_bad_lines="skip", index_col=False)
     df.columns = [str(c).strip() for c in df.columns]
 
     # Security Code কলাম: যে কলামের প্রায় সব মান ৬ অঙ্কের সংখ্যা
@@ -414,3 +414,4 @@ if start_scan:
             render_cards(bearish_results)
         else:
             st.info("⚠️ নির্বাচিত ফিল্টার অনুযায়ী এই মুহূর্তে কোনো স্টকে বেয়ারিশ রিভার্সাল পাওয়া যায়নি।")
+                
