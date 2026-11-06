@@ -67,12 +67,21 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.RECORD_AUDIO" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.RECORD_AUDIO" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <queries>
                   <intent>
                       <action android:name="android.intent.action.MAIN" />
                       <category android:name="android.intent.category.LAUNCHER" />
                   </intent>
                   <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
+                  <intent><action android:name="android.speech.RecognitionService" /></intent>
                   <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
               </queries>
               <application
@@ -85,6 +94,14 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
+                  <service
+                      android:name=".ListenService"
+                      android:exported="false"
+                      android:foregroundServiceType="microphone" />
+                  <service
+                      android:name=".ListenService"
+                      android:exported="false"
+                      android:foregroundServiceType="microphone" />
                   <service
                       android:name=".JarvisService"
                       android:exported="false"
@@ -121,8 +138,11 @@ jobs:
           cat > app/src/main/java/com/example/jarvis/MainActivity.kt <<'JARVIS_EOF'
           package com.example.jarvis
 
+          import android.Manifest
           import android.app.Activity
           import android.content.Intent
+          import android.content.pm.PackageManager
+          import android.os.Build
           import android.os.Bundle
           import android.provider.Settings
           import android.speech.RecognizerIntent
@@ -136,7 +156,9 @@ jobs:
 
           class MainActivity : Activity() {
               private lateinit var out: TextView
+              private lateinit var hf: Switch
               private val REQ = 11
+              private val REQ_PERM = 21
 
               override fun onCreate(b: Bundle?) {
                   super.onCreate(b)
@@ -155,6 +177,16 @@ jobs:
                   }
                   root.addView(sw)
 
+                  hf = Switch(this)
+                  hf.text = "হ্যান্ডস-ফ্রি: জার্ভিস বললে শুনবে"
+                  hf.textSize = 16f
+                  hf.isChecked = p.getBoolean("hf", false)
+                  hf.setOnCheckedChangeListener { _, c ->
+                      p.edit().putBoolean("hf", c).apply()
+                      if (c) startHandsFree() else stopService(Intent(this, ListenService::class.java))
+                  }
+                  root.addView(hf)
+
                   val key = EditText(this)
                   key.hint = "Gemini API Key"
                   key.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -163,15 +195,22 @@ jobs:
 
                   val model = EditText(this)
                   model.hint = "মডেলের নাম"
-                  model.setText(p.getString("model", "gemini-2.5-flash"))
+                  model.setText(p.getString("model", "gemini-3-flash-preview"))
                   root.addView(model)
 
+                  val wake = EditText(this)
+                  wake.hint = "জাগানোর শব্দ (কমা দিয়ে)"
+                  val savedWake = p.getString("wake", "") ?: ""
+                  wake.setText(if (savedWake.isBlank()) ListenService.DEFAULT_WAKE else savedWake)
+                  root.addView(wake)
+
                   val save = Button(this)
-                  save.text = "কী ও মডেল সেভ করুন"
+                  save.text = "কী, মডেল ও শব্দ সেভ করুন"
                   save.setOnClickListener {
                       p.edit().putString("key", key.text.toString().trim())
-                          .putString("model", model.text.toString().trim()).apply()
-                      log("কী সেভ হয়েছে")
+                          .putString("model", model.text.toString().trim())
+                          .putString("wake", wake.text.toString().trim()).apply()
+                      log("সেভ হয়েছে")
                   }
                   root.addView(save)
 
@@ -208,6 +247,39 @@ jobs:
               }
 
               private fun log(s: String) { out.append(s + "\n\n") }
+
+              private fun startHandsFree() {
+                  val need = ArrayList<String>()
+                  if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                      need.add(Manifest.permission.RECORD_AUDIO)
+                  }
+                  if (Build.VERSION.SDK_INT >= 33 &&
+                      checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                      need.add(Manifest.permission.POST_NOTIFICATIONS)
+                  }
+                  if (need.isNotEmpty()) {
+                      requestPermissions(need.toTypedArray(), REQ_PERM)
+                  } else {
+                      launchListen()
+                  }
+              }
+
+              private fun launchListen() {
+                  startForegroundService(Intent(this, ListenService::class.java))
+                  log("হ্যান্ডস-ফ্রি চালু। জার্ভিস বলে কাজ বলুন")
+              }
+
+              override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, res: IntArray) {
+                  super.onRequestPermissionsResult(code, perms, res)
+                  if (code == REQ_PERM) {
+                      if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                          launchListen()
+                      } else {
+                          log("মাইকের অনুমতি ছাড়া হ্যান্ডস-ফ্রি চলবে না")
+                          hf.isChecked = false
+                      }
+                  }
+              }
 
               private fun listen() {
                   val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -247,7 +319,6 @@ jobs:
           import android.os.Looper
           import android.speech.tts.TextToSpeech
           import android.view.Gravity
-          import android.view.View
           import android.view.ViewGroup
           import android.view.WindowManager
           import android.view.accessibility.AccessibilityEvent
@@ -262,13 +333,14 @@ jobs:
           import java.util.Locale
           import java.util.concurrent.CountDownLatch
           import java.util.concurrent.TimeUnit
+          import java.util.concurrent.atomic.AtomicBoolean
 
           class JarvisService : AccessibilityService() {
 
               companion object {
                   var instance: JarvisService? = null
                   var log: ((String) -> Unit)? = null
-                  const val DEFAULT_MODEL = "gemini-2.5-flash"
+                  const val DEFAULT_MODEL = "gemini-3-flash-preview"
                   const val SYSTEM = "You are Jarvis, a personal assistant on the user's Android phone. " +
                       "Always reply in Bengali, short and clear. " +
                       "Use search_web for news, prices, current facts and ideas. " +
@@ -280,7 +352,20 @@ jobs:
 
               private val ui = Handler(Looper.getMainLooper())
               private var tts: TextToSpeech? = null
-              @Volatile private var busy = false
+              @Volatile var busy = false
+
+              fun speaking(): Boolean = tts?.isSpeaking == true
+              @Volatile var confirming = false
+              private var answerFn: ((Boolean) -> Unit)? = null
+
+              fun isIdle(): Boolean {
+                  val speaking = tts?.isSpeaking == true
+                  return !speaking && (!busy || confirming)
+              }
+
+              fun speak(t: String) { say(t) }
+
+              fun answerByVoice(v: Boolean) { ui.post { answerFn?.invoke(v) } }
 
               override fun onServiceConnected() {
                   instance = this
@@ -294,7 +379,7 @@ jobs:
 
               private fun isOn() = getSharedPreferences("jarvis", MODE_PRIVATE).getBoolean("on", false)
 
-              private fun say(t: String) {
+              fun say(t: String) {
                   ui.post { log?.invoke(t) }
                   tts?.speak(t, TextToSpeech.QUEUE_ADD, null, null)
               }
@@ -316,7 +401,7 @@ jobs:
                   val contents = JSONArray().put(
                       JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", userText)))
                   )
-                  for (step in 0 until 15) {
+                  for (step in 0 until 8) {
                       if (!isOn()) { say("জার্ভিস বন্ধ আছে"); return }
                       val body = JSONObject()
                           .put("system_instruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYSTEM))))
@@ -333,218 +418,4 @@ jobs:
                           val p = parts.getJSONObject(i)
                           if (p.has("functionCall")) {
                               val fc = p.getJSONObject("functionCall")
-                              val name = fc.getString("name")
-                              val args = fc.optJSONObject("args") ?: JSONObject()
-                              val out = if (name == "search_web") searchWeb(key, model, args.optString("query")) else doTool(name, args)
-                              results.put(
-                                  JSONObject().put("functionResponse",
-                                      JSONObject().put("name", name).put("response", JSONObject().put("result", out)))
-                              )
-                          } else if (p.has("text") && !p.optBoolean("thought", false)) {
-                              text.append(p.getString("text"))
-                          }
-                      }
-                      if (results.length() > 0) {
-                          contents.put(JSONObject().put("role", "user").put("parts", results))
-                          continue
-                      }
-                      say(if (text.isNotEmpty()) text.toString() else "উত্তর পাওয়া যায়নি")
-                      return
-                  }
-                  say("অনেক ধাপ হয়ে গেছে, থামলাম")
-              }
-
-              private fun post(key: String, model: String, body: JSONObject): JSONObject {
-                  val c = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
-                      .openConnection() as HttpURLConnection
-                  c.requestMethod = "POST"
-                  c.connectTimeout = 30000
-                  c.readTimeout = 120000
-                  c.doOutput = true
-                  c.setRequestProperty("content-type", "application/json")
-                  c.setRequestProperty("x-goog-api-key", key)
-                  c.outputStream.use { it.write(body.toString().toByteArray()) }
-                  val code = c.responseCode
-                  val s = (if (code in 200..299) c.inputStream else c.errorStream).bufferedReader().use { it.readText() }
-                  if (code == 429) throw Exception("ফ্রি লিমিট শেষ, কিছুক্ষণ পরে চেষ্টা করুন")
-                  if (code == 404) throw Exception("মডেলের নাম ঠিক নেই, অ্যাপে মডেলের নাম বদলে দেখুন")
-                  if (code !in 200..299) throw Exception("API $code: ${s.take(200)}")
-                  return JSONObject(s)
-              }
-
-              // Google Search is done in a separate plain call (read-only, no phone action)
-              private fun searchWeb(key: String, model: String, q: String): String {
-                  val body = JSONObject()
-                      .put("contents", JSONArray().put(
-                          JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", q)))))
-                      .put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
-                  val r = post(key, model, body)
-                  val parts = r.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-                      ?: return "no result"
-                  val sb = StringBuilder()
-                  for (i in 0 until parts.length()) sb.append(parts.getJSONObject(i).optString("text"))
-                  return sb.toString().ifBlank { "no result" }
-              }
-
-              private fun str(d: String) = JSONObject().put("type", "STRING").put("description", d)
-
-              private fun decl(name: String, desc: String, props: JSONObject? = null, req: JSONArray? = null): JSONObject {
-                  val o = JSONObject().put("name", name).put("description", desc)
-                  if (props != null) {
-                      o.put("parameters", JSONObject().put("type", "OBJECT").put("properties", props).put("required", req))
-                  }
-                  return o
-              }
-
-              private fun declarations() = JSONArray()
-                  .put(decl("search_web", "Search Google for current news, facts, prices and ideas.",
-                      JSONObject().put("query", str("search query")), JSONArray().put("query")))
-                  .put(decl("read_screen", "Read the visible text on the phone screen."))
-                  .put(decl("tap_text", "Tap the element showing this visible text.",
-                      JSONObject().put("text", str("visible text")), JSONArray().put("text")))
-                  .put(decl("type_text", "Type text into the focused or first input field.",
-                      JSONObject().put("text", str("text to type")), JSONArray().put("text")))
-                  .put(decl("scroll", "Scroll the screen.",
-                      JSONObject().put("direction", str("down or up")), JSONArray().put("direction")))
-                  .put(decl("go_back", "Press the Back button."))
-                  .put(decl("open_app", "Open an installed app by its name.",
-                      JSONObject().put("name", str("app name")), JSONArray().put("name")))
-
-              // ---------- Tools (each needs user permission) ----------
-              private fun doTool(name: String, i: JSONObject): String {
-                  val what = when (name) {
-                      "read_screen" -> "স্ক্রিনের লেখা পড়বো। অনুমতি দেবেন?"
-                      "tap_text" -> "'${i.optString("text").take(100)}' এ ট্যাপ করবো। অনুমতি দেবেন?"
-                      "type_text" -> "লিখবো: ${i.optString("text").take(300)}। অনুমতি দেবেন?"
-                      "scroll" -> "স্ক্রল করবো (${i.optString("direction")})। অনুমতি দেবেন?"
-                      "go_back" -> "পেছনে যাবো। অনুমতি দেবেন?"
-                      "open_app" -> "অ্যাপ খুলবো: ${i.optString("name")}। অনুমতি দেবেন?"
-                      else -> return "unknown tool"
-                  }
-                  if (!confirm(what)) return "User denied this action. Do not retry. Ask the user what to do."
-                  val r = when (name) {
-                      "read_screen" -> readScreen()
-                      "tap_text" -> tapText(i.optString("text"))
-                      "type_text" -> typeText(i.optString("text"))
-                      "scroll" -> scroll(i.optString("direction"))
-                      "go_back" -> { performGlobalAction(GLOBAL_ACTION_BACK); "done" }
-                      "open_app" -> openApp(i.optString("name"))
-                      else -> "unknown"
-                  }
-                  Thread.sleep(1200)
-                  return r
-              }
-
-              private fun confirm(msg: String): Boolean {
-                  val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                  val latch = CountDownLatch(1)
-                  var answer = false
-                  var box: View? = null
-                  ui.post {
-                      val b = LinearLayout(this)
-                      b.orientation = LinearLayout.VERTICAL
-                      b.setBackgroundColor(0xEE222222.toInt())
-                      b.setPadding(40, 40, 40, 40)
-                      val tv = TextView(this)
-                      tv.text = "জার্ভিস: $msg"
-                      tv.setTextColor(0xFFFFFFFF.toInt())
-                      tv.textSize = 18f
-                      b.addView(tv)
-                      val row = LinearLayout(this)
-                      row.orientation = LinearLayout.HORIZONTAL
-                      fun add(label: String, v: Boolean) {
-                          val btn = Button(this)
-                          btn.text = label
-                          btn.setOnClickListener {
-                              answer = v
-                              try { wm.removeView(b) } catch (e: Exception) {}
-                              latch.countDown()
-                          }
-                          row.addView(btn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                      }
-                      add("হ্যাঁ", true)
-                      add("না", false)
-                      b.addView(row)
-                      val lp = WindowManager.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                          WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
-                      )
-                      lp.gravity = Gravity.BOTTOM
-                      wm.addView(b, lp)
-                      box = b
-                  }
-                  tts?.speak(msg, TextToSpeech.QUEUE_FLUSH, null, null)
-                  if (!latch.await(120, TimeUnit.SECONDS)) {
-                      ui.post { try { box?.let { wm.removeView(it) } } catch (e: Exception) {} }
-                      return false
-                  }
-                  return answer
-              }
-
-              private fun findNode(n: AccessibilityNodeInfo?, ok: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-                  if (n == null) return null
-                  if (ok(n)) return n
-                  for (i in 0 until n.childCount) {
-                      val r = findNode(n.getChild(i), ok)
-                      if (r != null) return r
-                  }
-                  return null
-              }
-
-              private fun readScreen(): String {
-                  val root = rootInActiveWindow ?: return "screen not readable"
-                  val sb = StringBuilder()
-                  fun walk(x: AccessibilityNodeInfo?) {
-                      if (x == null || sb.length > 6000) return
-                      val t = x.text?.toString() ?: x.contentDescription?.toString()
-                      if (!t.isNullOrBlank()) sb.append(if (x.isClickable) "[button] " else "").append(t.take(150)).append('\n')
-                      for (i in 0 until x.childCount) walk(x.getChild(i))
-                  }
-                  walk(root)
-                  return sb.toString().ifBlank { "empty screen" }
-              }
-
-              private fun tapText(t: String): String {
-                  val root = rootInActiveWindow ?: return "no screen"
-                  val list = root.findAccessibilityNodeInfosByText(t)
-                  if (list.isNullOrEmpty()) return "not found"
-                  var n: AccessibilityNodeInfo? = list[0]
-                  while (n != null && !n.isClickable) n = n.parent
-                  return if (n != null && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) "tapped" else "could not tap"
-              }
-
-              private fun typeText(t: String): String {
-                  val root = rootInActiveWindow ?: return "no screen"
-                  val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: findNode(root) { it.isEditable } ?: return "no input field"
-                  val args = Bundle()
-                  args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, t)
-                  return if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) "typed" else "failed"
-              }
-
-              private fun scroll(dir: String): String {
-                  val root = rootInActiveWindow ?: return "no screen"
-                  val node = findNode(root) { it.isScrollable } ?: return "nothing scrollable"
-                  val a = if (dir == "up") AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                  return if (node.performAction(a)) "scrolled" else "could not scroll"
-              }
-
-              private fun openApp(name: String): String {
-                  val pm = packageManager
-                  val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-                  val app = pm.queryIntentActivities(q, 0).firstOrNull { it.loadLabel(pm).toString().contains(name, true) }
-                      ?: return "app not found"
-                  val li = pm.getLaunchIntentForPackage(app.activityInfo.packageName) ?: return "cannot open"
-                  li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                  startActivity(li)
-                  return "opened"
-              }
-          }
-          JARVIS_EOF
-      - name: Build APK
-        working-directory: jarvis
-        run: gradle assembleDebug --no-daemon
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jarvis-apk
-          path: jarvis/app/build/outputs/apk/debug/app-debug.apk
+                              val
