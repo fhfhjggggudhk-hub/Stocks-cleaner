@@ -418,4 +418,391 @@ jobs:
                           val p = parts.getJSONObject(i)
                           if (p.has("functionCall")) {
                               val fc = p.getJSONObject("functionCall")
-                              val
+                              val name = fc.getString("name")
+                              val args = fc.optJSONObject("args") ?: JSONObject()
+                              val out = if (name == "search_web") searchWeb(key, model, args.optString("query")) else doTool(name, args)
+                              results.put(
+                                  JSONObject().put("functionResponse",
+                                      JSONObject().put("name", name).put("response", JSONObject().put("result", out)))
+                              )
+                          } else if (p.has("text") && !p.optBoolean("thought", false)) {
+                              text.append(p.getString("text"))
+                          }
+                      }
+                      if (results.length() > 0) {
+                          contents.put(JSONObject().put("role", "user").put("parts", results))
+                          continue
+                      }
+                      say(if (text.isNotEmpty()) text.toString() else "উত্তর পাওয়া যায়নি")
+                      return
+                  }
+                  say("অনেক ধাপ হয়ে গেছে, থামলাম")
+              }
+
+              private fun post(key: String, model: String, body: JSONObject): JSONObject {
+                  for (attempt in 0..2) {
+                      val c = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+                          .openConnection() as HttpURLConnection
+                      c.requestMethod = "POST"
+                      c.connectTimeout = 30000
+                      c.readTimeout = 120000
+                      c.doOutput = true
+                      c.setRequestProperty("content-type", "application/json")
+                      c.setRequestProperty("x-goog-api-key", key)
+                      c.outputStream.use { it.write(body.toString().toByteArray()) }
+                      val code = c.responseCode
+                      val s = (if (code in 200..299) c.inputStream else c.errorStream).bufferedReader().use { it.readText() }
+                      if (code == 429) {
+                          if (attempt < 2) {
+                              say("ফ্রি লিমিটের জন্য কিছুক্ষণ অপেক্ষা করছি...")
+                              Thread.sleep(10000)
+                              continue
+                          }
+                          throw Exception("ফ্রি লিমিট শেষ। অন্য মডেল বসান বা কিছুক্ষণ পরে চেষ্টা করুন")
+                      }
+                      if (code == 404) throw Exception("মডেলের নাম ঠিক নেই, অ্যাপে মডেলের নাম বদলে দেখুন")
+                      if (code !in 200..299) throw Exception("API $code: ${s.take(200)}")
+                      return JSONObject(s)
+                  }
+                  throw Exception("অজানা সমস্যা")
+              }
+
+              // Google Search is done in a separate plain call (read-only, no phone action)
+              private fun searchWeb(key: String, model: String, q: String): String {
+                  val body = JSONObject()
+                      .put("contents", JSONArray().put(
+                          JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", q)))))
+                      .put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+                  val r = post(key, model, body)
+                  val parts = r.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                      ?: return "no result"
+                  val sb = StringBuilder()
+                  for (i in 0 until parts.length()) sb.append(parts.getJSONObject(i).optString("text"))
+                  return sb.toString().ifBlank { "no result" }
+              }
+
+              private fun str(d: String) = JSONObject().put("type", "STRING").put("description", d)
+
+              private fun decl(name: String, desc: String, props: JSONObject? = null, req: JSONArray? = null): JSONObject {
+                  val o = JSONObject().put("name", name).put("description", desc)
+                  if (props != null) {
+                      o.put("parameters", JSONObject().put("type", "OBJECT").put("properties", props).put("required", req))
+                  }
+                  return o
+              }
+
+              private fun declarations() = JSONArray()
+                  .put(decl("search_web", "Search Google for current news, facts, prices and ideas.",
+                      JSONObject().put("query", str("search query")), JSONArray().put("query")))
+                  .put(decl("read_screen", "Read the visible text on the phone screen."))
+                  .put(decl("tap_text", "Tap the element showing this visible text.",
+                      JSONObject().put("text", str("visible text")), JSONArray().put("text")))
+                  .put(decl("type_text", "Type text into the focused or first input field.",
+                      JSONObject().put("text", str("text to type")), JSONArray().put("text")))
+                  .put(decl("scroll", "Scroll the screen.",
+                      JSONObject().put("direction", str("down or up")), JSONArray().put("direction")))
+                  .put(decl("go_back", "Press the Back button."))
+                  .put(decl("open_app", "Open an installed app by its name.",
+                      JSONObject().put("name", str("app name")), JSONArray().put("name")))
+
+              // ---------- Tools (each needs user permission) ----------
+              private fun doTool(name: String, i: JSONObject): String {
+                  val what = when (name) {
+                      "read_screen" -> "স্ক্রিনের লেখা পড়বো। অনুমতি দেবেন?"
+                      "tap_text" -> "'${i.optString("text").take(100)}' এ ট্যাপ করবো। অনুমতি দেবেন?"
+                      "type_text" -> "লিখবো: ${i.optString("text").take(300)}। অনুমতি দেবেন?"
+                      "scroll" -> "স্ক্রল করবো (${i.optString("direction")})। অনুমতি দেবেন?"
+                      "go_back" -> "পেছনে যাবো। অনুমতি দেবেন?"
+                      "open_app" -> "অ্যাপ খুলবো: ${i.optString("name")}। অনুমতি দেবেন?"
+                      else -> return "unknown tool"
+                  }
+                  if (!confirm(what)) return "User denied this action. Do not retry. Ask the user what to do."
+                  val r = when (name) {
+                      "read_screen" -> readScreen()
+                      "tap_text" -> tapText(i.optString("text"))
+                      "type_text" -> typeText(i.optString("text"))
+                      "scroll" -> scroll(i.optString("direction"))
+                      "go_back" -> { performGlobalAction(GLOBAL_ACTION_BACK); "done" }
+                      "open_app" -> openApp(i.optString("name"))
+                      else -> "unknown"
+                  }
+                  Thread.sleep(1200)
+                  return r
+              }
+
+              private fun confirm(msg: String): Boolean {
+                  val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                  val latch = CountDownLatch(1)
+                  val done = AtomicBoolean(false)
+                  var answer = false
+                  confirming = true
+                  ui.post {
+                      val b = LinearLayout(this)
+                      b.orientation = LinearLayout.VERTICAL
+                      b.setBackgroundColor(0xEE222222.toInt())
+                      b.setPadding(40, 40, 40, 40)
+                      val tv = TextView(this)
+                      tv.text = "জার্ভিস: $msg"
+                      tv.setTextColor(0xFFFFFFFF.toInt())
+                      tv.textSize = 18f
+                      b.addView(tv)
+                      val row = LinearLayout(this)
+                      row.orientation = LinearLayout.HORIZONTAL
+                      fun finish(v: Boolean) {
+                          if (done.getAndSet(true)) return
+                          answer = v
+                          confirming = false
+                          answerFn = null
+                          try { wm.removeView(b) } catch (e: Exception) {}
+                          latch.countDown()
+                      }
+                      answerFn = { v -> finish(v) }
+                      fun add(label: String, v: Boolean) {
+                          val btn = Button(this)
+                          btn.text = label
+                          btn.setOnClickListener { finish(v) }
+                          row.addView(btn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                      }
+                      add("হ্যাঁ", true)
+                      add("না", false)
+                      b.addView(row)
+                      val lp = WindowManager.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                          WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+                      )
+                      lp.gravity = Gravity.BOTTOM
+                      wm.addView(b, lp)
+                  }
+                  tts?.speak(msg, TextToSpeech.QUEUE_FLUSH, null, null)
+                  if (!latch.await(120, TimeUnit.SECONDS)) {
+                      answerByVoice(false)
+                      return false
+                  }
+                  return answer
+              }
+
+              private fun findNode(n: AccessibilityNodeInfo?, ok: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+                  if (n == null) return null
+                  if (ok(n)) return n
+                  for (i in 0 until n.childCount) {
+                      val r = findNode(n.getChild(i), ok)
+                      if (r != null) return r
+                  }
+                  return null
+              }
+
+              private fun readScreen(): String {
+                  val root = rootInActiveWindow ?: return "screen not readable"
+                  val sb = StringBuilder()
+                  fun walk(x: AccessibilityNodeInfo?) {
+                      if (x == null || sb.length > 6000) return
+                      val t = x.text?.toString() ?: x.contentDescription?.toString()
+                      if (!t.isNullOrBlank()) sb.append(if (x.isClickable) "[button] " else "").append(t.take(150)).append('\n')
+                      for (i in 0 until x.childCount) walk(x.getChild(i))
+                  }
+                  walk(root)
+                  return sb.toString().ifBlank { "empty screen" }
+              }
+
+              private fun tapText(t: String): String {
+                  val root = rootInActiveWindow ?: return "no screen"
+                  val list = root.findAccessibilityNodeInfosByText(t)
+                  if (list.isNullOrEmpty()) return "not found"
+                  var n: AccessibilityNodeInfo? = list[0]
+                  while (n != null && !n.isClickable) n = n.parent
+                  return if (n != null && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) "tapped" else "could not tap"
+              }
+
+              private fun typeText(t: String): String {
+                  val root = rootInActiveWindow ?: return "no screen"
+                  val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: findNode(root) { it.isEditable } ?: return "no input field"
+                  val args = Bundle()
+                  args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, t)
+                  return if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) "typed" else "failed"
+              }
+
+              private fun scroll(dir: String): String {
+                  val root = rootInActiveWindow ?: return "no screen"
+                  val node = findNode(root) { it.isScrollable } ?: return "nothing scrollable"
+                  val a = if (dir == "up") AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                  return if (node.performAction(a)) "scrolled" else "could not scroll"
+              }
+
+              private fun openApp(name: String): String {
+                  val pm = packageManager
+                  val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                  val app = pm.queryIntentActivities(q, 0).firstOrNull { it.loadLabel(pm).toString().contains(name, true) }
+                      ?: return "app not found"
+                  val li = pm.getLaunchIntentForPackage(app.activityInfo.packageName) ?: return "cannot open"
+                  li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                  startActivity(li)
+                  return "opened"
+              }
+          }
+          JARVIS_EOF
+          mkdir -p $(dirname app/src/main/java/com/example/jarvis/ListenService.kt)
+          cat > app/src/main/java/com/example/jarvis/ListenService.kt <<'JARVIS_EOF'
+          package com.example.jarvis
+
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.Service
+          import android.content.Intent
+          import android.content.pm.ServiceInfo
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.IBinder
+          import android.os.Looper
+          import android.speech.RecognitionListener
+          import android.speech.RecognizerIntent
+          import android.speech.SpeechRecognizer
+
+          class ListenService : Service() {
+
+              companion object {
+                  const val DEFAULT_WAKE = "জার্ভিস,জারভিস,জারবেস,জার্বেস,জারবিস,jarvis,যার বেশ,জার বেশ"
+              }
+
+              private val h = Handler(Looper.getMainLooper())
+              private var rec: SpeechRecognizer? = null
+              private var running = false
+              private var waitingUntil = 0L
+
+              override fun onBind(intent: Intent?): IBinder? = null
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                  nm.createNotificationChannel(
+                      NotificationChannel("jarvis", "Jarvis", NotificationManager.IMPORTANCE_LOW)
+                  )
+                  val n = Notification.Builder(this, "jarvis")
+                      .setContentTitle("জার্ভিস শুনছে")
+                      .setContentText("জার্ভিস বলে কাজ বলুন")
+                      .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                      .build()
+                  if (Build.VERSION.SDK_INT >= 29) {
+                      startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                  } else {
+                      startForeground(1, n)
+                  }
+                  if (!running) {
+                      running = true
+                      h.post { start() }
+                  }
+                  return START_STICKY
+              }
+
+              private fun start() {
+                  if (!running) return
+                  if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+                      JarvisService.log?.invoke("এই ফোনে ভয়েস চেনা পাওয়া যায়নি")
+                      stopSelf()
+                      return
+                  }
+                  rec?.destroy()
+                  val r = SpeechRecognizer.createSpeechRecognizer(this)
+                  rec = r
+                  r.setRecognitionListener(object : RecognitionListener {
+                      override fun onReadyForSpeech(p: Bundle?) {}
+                      override fun onBeginningOfSpeech() {}
+                      override fun onRmsChanged(v: Float) {}
+                      override fun onBufferReceived(b: ByteArray?) {}
+                      override fun onEndOfSpeech() {}
+                      override fun onPartialResults(b: Bundle?) {}
+                      override fun onEvent(t: Int, b: Bundle?) {}
+                      override fun onError(e: Int) {
+                          if (e == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                              JarvisService.log?.invoke("মাইকের অনুমতি নেই")
+                              stopSelf()
+                          } else {
+                              again()
+                          }
+                      }
+                      override fun onResults(b: Bundle?) {
+                          val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                          handle(t)
+                          again()
+                      }
+                  })
+                  val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "bn-BD")
+                  r.startListening(i)
+              }
+
+              private fun again() {
+                  if (running) h.postDelayed({ start() }, 600)
+              }
+
+              private fun handle(t: String) {
+                  if (t.isBlank()) return
+                  val s = JarvisService.instance
+                  if (s != null && s.speaking()) return
+                  if (s != null && s.confirming) {
+                      val w = t.lowercase()
+                      val no = listOf("না", "নো", "no", "থামো", "বাতিল", "cancel")
+                      val yes = listOf("হ্যাঁ", "হ্যা", "হাঁ", "হা ", "ঠিক আছে", "yes", "ok", "okay", "করো", "কর")
+                      if (no.any { w.contains(it) }) s.answerByVoice(false)
+                      else if (yes.any { w.contains(it) }) s.answerByVoice(true)
+                      return
+                  }
+                  if (s != null && s.busy) return
+                  if (System.currentTimeMillis() < waitingUntil) {
+                      waitingUntil = 0L
+                      dispatch(t)
+                      return
+                  }
+                  val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
+                  val saved = prefs.getString("wake", "") ?: ""
+                  val wakes = (if (saved.isBlank()) DEFAULT_WAKE else saved)
+                      .split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+                  val low = t.lowercase()
+                  for (w in wakes) {
+                      val idx = low.indexOf(w)
+                      if (idx >= 0) {
+                          val cmd = low.substring(idx + w.length).trim(' ', ',', '।', '.')
+                          if (cmd.length >= 2) {
+                              dispatch(cmd)
+                          } else {
+                              waitingUntil = System.currentTimeMillis() + 15000L
+                              JarvisService.log?.invoke("জী, বলুন...")
+                          }
+                          return
+                      }
+                  }
+                  JarvisService.log?.invoke("শুনলাম (জার্ভিস শব্দ নেই): $t")
+              }
+
+              private fun dispatch(cmd: String) {
+                  val prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
+                  if (!prefs.getBoolean("on", false)) {
+                      JarvisService.log?.invoke("জার্ভিস বন্ধ আছে, অ্যাপের উপরের বাটন চালু করুন")
+                      return
+                  }
+                  val s = JarvisService.instance
+                  if (s == null) {
+                      JarvisService.log?.invoke("Accessibility চালু নেই")
+                      return
+                  }
+                  JarvisService.log?.invoke("আপনি: $cmd")
+                  s.runCommand(cmd)
+              }
+
+              override fun onDestroy() {
+                  running = false
+                  h.removeCallbacksAndMessages(null)
+                  rec?.destroy()
+                  super.onDestroy()
+              }
+          }
+          JARVIS_EOF
+      - name: Build APK
+        working-directory: jarvis
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-apk
+          path: jarvis/app/build/outputs/apk/debug/app-debug.apk
