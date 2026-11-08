@@ -630,10 +630,16 @@ VfbOLVl4fqf0kQHvny5+cL5U6JjydzM9AbVMakmwtVi/BF0FIyXwIpAkgVeujQRfN6IvE1XNzHhIdUSl
 }
 def _src(n):
     return zlib.decompress(base64.b64decode(''.join(_MODS[n].split()))).decode('utf-8')
+# সংস্করণ-চিহ্ন: ফাইল বদলালে (নতুন commit) মডিউলগুলো আবার লোড হয়, রিবুট লাগে না
+_VER = zlib.crc32(''.join(_MODS[n] for n in sorted(_MODS)).encode())
+_force = getattr(sys.modules.get('_swing_bundle'), 'ver', None) != _VER
 for _n in ['common', 'a1_scanner', 'a2_news_events', 'a3_entry_timer', 'a4_exit_planner', 'a5_time_machine', 'a6_risk_manager', 'a7_verdict', 'a8_portfolio', 'pipeline']:
-    if _n not in sys.modules:
+    if _force or _n not in sys.modules:
         _m = types.ModuleType(_n)
         _m.__dict__['_BASE_DIR'] = _HERE
         sys.modules[_n] = _m
         exec(compile(_src(_n), '<swing:%s>' % _n, 'exec'), _m.__dict__)
+_mark = types.ModuleType('_swing_bundle')
+_mark.ver = _VER
+sys.modules['_swing_bundle'] = _mark
 exec(compile(_src('app'), '<swing:app>', 'exec'), globals())
