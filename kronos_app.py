@@ -1,18 +1,6 @@
-#!/usr/bin/env python3
-"""
-সংযুক্ত পোর্টফোলিও ট্র্যাকার ও এজেন্ট পাইপলাইন।
-এটি দিয়ে আপনি যেমন স্টক পোর্টফোলিও ট্র্যাক ও অ্যালার্ট দেখতে পারবেন,
-তেমনি পাইপলাইনের মাধ্যমে নতুন স্টক বিশ্লেষণ করে রিপোর্টও বানাতে পারবেন।
-
-ব্যবহারের উদাহরণ:
-    python combined_system.py show                  # পোর্টফোলিও পজিশন দেখুন
-    python combined_system.py add TCS 10 3500 3400 3700 # পোর্টফোলিওতে স্টক যোগ করুন
-    python combined_system.py close TCS 3650          # ট্রেড বন্ধ করুন
-    python combined_system.py analyze TCS             # পাইপলাইন দিয়ে স্টক অ্যানালিসিস করুন
-"""
 import datetime as dt
-import sys
 import numpy as np
+import streamlit as st
 
 import common as C
 import a1_scanner as A1
@@ -26,220 +14,133 @@ import a10_news_radar as A10
 import a11_fundamentals as A11
 import a12_sector as A12
 
-# ==========================================
-# অংশ ১: পোর্টফোলিও ট্র্যাকার ও অ্যালার্ট ফাংশন
-# ==========================================
+st.set_page_config(page_title="Kronos Stock System", layout="wide")
 
-def load_portfolio():
-    return C.load_json("portfolio.json", {"positions": [], "closed": []})
+st.title("📊 Kronos পোর্টফোলিও ও স্টক অ্যানালিসিস সিস্টেম")
 
-def add_portfolio(sym, qty, entry, sl, t1=None):
-    pf = load_portfolio()
-    sym = sym.upper().replace(".NS", "")
-    if any(p["symbol"] == sym for p in pf["positions"]):
-        raise ValueError("%s আগে থেকেই পোর্টফোলিওতে আছে" % sym)
-    pf["positions"].append({
-        "symbol": sym, 
-        "qty": float(qty), 
-        "entry": float(entry), 
-        "sl": float(sl),
-        "t1": float(t1) if t1 else None, 
-        "sector": C.sector_of(sym)[0],
-        "date": C.ist_now().date().isoformat()
-    })
-    C.save_json("portfolio.json", pf)
-    print("সফলভাবে পোর্টফোলিওতে যোগ হয়েছে।")
+# কনফিগারেশন লোড
+cfg = C.load_config()
 
-def close_portfolio(sym, exit_price):
-    pf = load_portfolio()
-    sym = sym.upper().replace(".NS", "")
-    pos = next((p for p in pf["positions"] if p["symbol"] == sym), None)
-    if not pos:
-        raise ValueError("%s পোর্টফোলিওতে পাওয়া যায়নি" % sym)
-    pnl = (float(exit_price) - pos["entry"]) * pos["qty"]
-    pf["positions"].remove(pos)
-    pf["closed"].append({
-        "symbol": sym, 
-        "pnl": round(pnl, 2), 
-        "exit": float(exit_price),
-        "date": C.ist_now().date().isoformat()
-    })
-    C.save_json("portfolio.json", pf)
-    return pnl
-
-def portfolio_status(cfg):
-    pf = load_portfolio()
-    rows = []
-    today = C.ist_now().date()
-    for p in pf["positions"]:
-        df = C.get_daily(p["symbol"], "3mo")
-        last = float(df["Close"].iloc[-1]) if df is not None and len(df) else None
-        held = int(np.busday_count(dt.date.fromisoformat(p["date"]), today))
-        row = dict(p, last=last, days_held=held, alerts=[])
-        if last is not None:
-            row["pnl"] = round((last - p["entry"]) * p["qty"], 2)
-            row["pnl_pct"] = round((last / p["entry"] - 1) * 100, 2)
-            if last <= p["sl"]:
-                row["alerts"].append("স্টপ ছুঁয়েছে: পরিকল্পনা অনুযায়ী বেরোন")
-            if p.get("t1") and last >= p["t1"]:
-                row["alerts"].append("টার্গেট ১ ছুঁয়েছে: অর্ধেক বিক্রি, বাকিটার স্টপ এন্ট্রিতে সরান")
-        if held >= cfg["hold_days"]:
-            row["alerts"].append("%d ট্রেডিং দিন পূর্ণ: সময়ের স্টপ, বেরোনোর কথা" % cfg["hold_days"])
-        rows.append(row)
-    return {"positions": rows, "closed": pf["closed"]}
-
+# সাইডবার মেনু
+menu = st.sidebar.selectbox("মেনু নির্বাচন করুন", ["পোর্টফোলিও স্ট্যাটাস", "নতুন স্টক যোগ করুন", "ট্রেড বন্ধ করুন", "স্টক অ্যানালিসিস পাইপলাইন"])
 
 # ==========================================
-# অংশ ২: পাইপলাইন ও অ্যানালিসিস লজিক
+# ১. পোর্টফোলিও স্ট্যাটাস (Show)
 # ==========================================
-
-LINKS = {
-    "scan": {"in": ["আপনার দেওয়া স্টকের নাম", "দৈনিক চার্ট (Yahoo)"], "out": ["news", "event", "strat"]},
-    "news": {"in": ["scan (কোন স্টক, কোন সেক্টর)", "Google ও Bing News", "সেক্টর ইনডেক্স"], "out": ["strat", "final"]},
-    "event": {"in": ["scan (ভলিউমের হিসাব)", "Yahoo-র ক্যালেন্ডার ও আর্থিক ফল"], "out": ["strat", "final"]},
-    "strat": {"in": ["scan (সাপোর্ট, ATR)", "news ও event (ঝুঁকি)", "৪H/১H চার্ট"], "out": ["tm", "final"]},
-    "tm": {"in": ["strat (এন্ট্রি, স্টপ, টার্গেট)", "২ বছরের ডেটা"], "out": ["final"]},
-    "final": {"in": ["scan, news, event, strat, tm সবার আউটপুট"], "out": ["আপনার চূড়ান্ত সিদ্ধান্ত"]},
-}
-
-def build_scenarios(snap, timing, plan, df, cfg):
-    if "stop" not in plan:
-        return []
-    sl, support = plan["stop"], plan.get("support_level")
-    avail = bool(timing.get("available"))
-    cur = float(timing["last_price"]) if avail else float(snap["price"])
-    trig = bool(timing.get("trigger"))
-    cands = [("A", "এখনই (১H ট্রিগার হয়েছে)" if trig else "এখনকার দামে (কনফার্মেশন ছাড়া)", float(plan["entry"]),
-              "১H বুলিশ ক্যান্ডেল সাপোর্টের কাছে বন্ধ হয়েছে" if trig else "১H কনফার্মেশন ছাড়া এন্ট্রি", "now")]
-    if trig and timing.get("confirm_above"):
-        lvl, cond = float(timing["confirm_above"]), "ওপরে বন্ধ হলে"
-    elif avail and timing.get("recent_high_3"):
-        lvl, cond = float(timing["recent_high_3"]), "সর্বোচ্চ সীমার ওপরে উঠলে"
+if menu == "পোর্টফোলিও স্ট্যাটাস":
+    st.subheader("📌 আপনার খোলা পজিশনসমূহ")
+    pf = C.load_json("portfolio.json", {"positions": [], "closed": []})
+    
+    if not pf["positions"]:
+        st.info("কোনো খোলা পজিশন নেই।")
     else:
-        lvl, cond = float(df["High"].iloc[-1]), "হাই দাম পার করলে"
-    
-    b = C.tick_up(lvl * 1.001)
-    if b > cur * 1.0005:
-        cands.append(("B", "কনফার্মেশনে", b, cond, "up"))
-    if support:
-        c_entry = C.tick_up(float(support) * 1.004)
-        if c_entry < cur * 0.996:
-            cands.append(("C", "সাপোর্ট ছুঁলে", c_entry, "দাম সাপোর্ট লেভেলে নামলে", "down"))
+        today = C.ist_now().date()
+        for p in pf["positions"]:
+            df = C.get_daily(p["symbol"], "3mo")
+            last = float(df["Close"].iloc[-1]) if df is not None and len(df) else None
+            held = int(np.busday_count(dt.date.fromisoformat(p["date"]), today))
             
-    budget = cfg["capital"] * cfg["risk_per_trade_pct"] / 100.0
-    out = []
-    for key, name, entry, cond, mode in cands:
-        risk = round(entry - sl, 2)
-        if risk <= 0:
-            continue
-        tg = A4.targets_for(entry, risk, snap, timing, cfg["hold_days"])
-        mc = A5.monte_carlo(df, entry, sl, tg["target1"], cfg)
-        if not mc.get("available"):
-            continue
-        reach = 1.0 if mode == "now" else A5.reach_probability(df, cur, entry, cfg, up=(mode == "up"))
-        reach_pct = None if reach is None else round(100 * reach, 1)
-        combined = None if reach_pct is None else round(reach_pct * mc["p_target1_pct"] / 100.0, 1)
-        qty = int(min(budget // risk, cfg["capital"] * cfg["max_position_pct"] / 100.0 // entry))
-        ok = tg["rr1"] >= cfg["min_rr"] and (mc["edge_pts"] is None or mc["edge_pts"] >= 0)
+            pnl_pct_str = "?"
+            if last is not None:
+                pnl = round((last - p["entry"]) * p["qty"], 2)
+                pnl_pct = round((last / p["entry"] - 1) * 100, 2)
+                pnl_pct_str = f"{pnl_pct:+.2f}%"
+            
+            with st.expander(f"📌 {p['symbol']} - {p['qty']} শেয়ার (PNL: {pnl_pct_str})"):
+                st.write(f"**এন্ট্রি প্রাইস:** ₹{p['entry']} | **বর্তমান দাম:** ₹{last} | **হোল্ড দিন:** {held} দিন | **স্টপ-লস:** ₹{p['sl']}")
+                if last and last <= p['sl']:
+                    st.error("⚠️ স্টপ ছুঁয়েছে: পরিকল্পনা অনুযায়ী বেরোন!")
+                if p.get('t1') and last and last >= p['t1']:
+                    st.warning("⚠️ টার্গেট ১ ছুঁয়েছে: অর্ধেক বিক্রি করুন!")
+                if held >= cfg["hold_days"]:
+                    st.warning(f"⚠️ {cfg['hold_days']} ট্রেডিং দিন পূর্ণ হয়েছে!")
+
+# ==========================================
+# ২. পোর্টফোলিওতে স্টক যোগ করা (Add)
+# ==========================================
+elif menu == "নতুন স্টক যোগ করুন":
+    st.subheader("➕ পোর্টফোলিওতে নতুন স্টক যোগ করুন")
+    with st.form("add_form"):
+        sym = st.text_input("স্টকের সিম্বল (যেমন: TCS)").upper().replace(".NS", "")
+        qty = st.number_input("শেয়ার সংখ্যা", min_value=1, value=10)
+        entry = st.number_input("এন্ট্রি প্রাইস (₹)", min_value=0.0, value=100.0)
+        sl = st.number_input("স্টপ-লস (₹)", min_value=0.0, value=90.0)
+        t1 = st.number_input("টার্গেট ১ (ঐচ্ছিক)", min_value=0.0, value=120.0)
+        submitted = st.form_submit_button("যোগ করুন")
         
-        out.append(dict(tg, key=key, name=name, condition=cond, entry=round(entry, 2), stop=sl, risk_per_share=risk,
-                        risk_pct=round(risk / entry * 100, 2), reach_pct=reach_pct,
-                        p_t1_pct=mc["p_target1_pct"], p_stop_pct=mc["p_stop_pct"], 
-                        share_pct=mc["share_target_pct"], breakeven_pct=mc["breakeven_pct"], 
-                        edge_pts=mc["edge_pts"], combined_pct=combined, qty=max(qty, 0), ok=ok))
-    return out
-
-def pick_best(scens):
-    if not scens:
-        return None
-    pool = [s for s in scens if s["ok"]]
-    if not pool:
-        return None
-    b = max(pool, key=lambda s: (s["edge_pts"] if s["edge_pts"] is not None else -999, s["combined_pct"] or 0))
-    return {k: b[k] for k in ("key", "name", "entry", "rr1", "p_t1_pct", "breakeven_pct", "edge_pts", "combined_pct", "ok")}
-
-def analyze_stock(sym, cfg, snap=None, macro=None, df=None):
-    df = df if df is not None else C.get_daily(sym, "2y")
-    if df is None:
-        return None
-    snap = snap or C.daily_snapshot(df, cfg)
-    if snap is None:
-        return None
-    info = A2.fetch_info(sym)
-    sec_name, _, guessed = A12.resolve_sector(sym, info)
-    ctx = A2.analyze(sym, cfg, macro, info=info, df=df)
-    fund = A11.analyze(sym, info=info)
-    secrep = A12.sector_report(sec_name, sym, df, guessed)
-    rad = A10.radar(sym, info.get("longName") or info.get("shortName"), sec_name)
-    rad["ai"] = A10.ai_review(rad)
-    
-    ctx["sector_name"] = sec_name
-    ctx["sector"] = {"stance": secrep["stance"], "ret10_pct": (secrep.get("own") or {}).get("ret21")}
-    ctx["fundamental"] = {"status": {"safe": "pass", "avoid": "fail", "caution": "fail"}.get(fund["verdict"], "unknown"), "note": fund["summary"]}
-    
-    timing = A3.analyze(sym, cfg, snap)
-    plan = A4.make_plan(sym, snap, timing, cfg)
-    tm = A5.run(sym, plan, cfg, df)
-    risk = A6.evaluate(sym, plan, ctx, cfg)
-    scens = build_scenarios(snap, timing, plan, df, cfg)
-    verdict = A7.decide(snap, ctx, timing, plan, tm, risk, cfg, scens, {"radar": rad, "fund": fund, "secrep": secrep})
-    
-    return {"symbol": sym, "company": rad["company"], "snap": snap, "ctx": ctx, "timing": timing, "plan": plan,
-            "tm": tm, "risk": risk, "verdict": verdict, "scenarios": scens, "best": pick_best(scens)}
-
-
-# ==========================================
-# অংশ ৩: প্রধান মেনু ও নিয়ন্ত্রণ (Main Function)
-# ==========================================
-
-def main(argv=None):
-    a = sys.argv[1:]
-    cfg = C.load_config()
-    try:
-        if not a:
-            print("ব্যবহারবিধি:")
-            print("  python combined_system.py show")
-            print("  python combined_system.py add <symbol> <qty> <entry> <sl> [t1]")
-            print("  python combined_system.py close <symbol> <exit_price>")
-            print("  python combined_system.py analyze <symbol>")
-            return 0
-
-        cmd = a[0]
-        if cmd == "show":
-            st = portfolio_status(cfg)
-            if not st["positions"]:
-                print("কোনো খোলা পজিশন নেই।")
-            for r in st["positions"]:
-                print("%-10s %s শেয়ার @ ₹%s | এখন %s | %s | %d দিন | SL ₹%s" % (
-                    r["symbol"], r["qty"], r["entry"], r["last"], 
-                    ("%+.2f%%" % r["pnl_pct"]) if r["last"] else "?", r["days_held"], r["sl"]))
-                for al in r["alerts"]:
-                    print("   ! " + al)
-                    
-        elif cmd == "add" and len(a) >= 5:
-            add_portfolio(*a[1:6])
-            
-        elif cmd == "close" and len(a) == 3:
-            pnl = close_portfolio(a[1], a[2])
-            print("ট্রেড বন্ধ। লাভ/লোকসান ₹%.2f" % pnl)
-            
-        elif cmd == "analyze" and len(a) >= 2:
-            sym = a[1].upper()
-            print("%s বিশ্লেষণ করা হচ্ছে..." % sym)
-            macro = A2.macro_context()
-            res = analyze_stock(sym, cfg, macro=macro)
-            if res:
-                print("বিশ্লেষণ সম্পন্ন! ভার্ডিক্ট কোড: %s" % res["verdict"]["code"])
-                print("বিস্তারিত রিপোর্ট তৈরি হয়েছে।")
+        if submitted:
+            pf = C.load_json("portfolio.json", {"positions": [], "closed": []})
+            if any(p["symbol"] == sym for p in pf["positions"]):
+                st.error(f"{sym} আগে থেকেই পোর্টফোলিওতে আছে!")
             else:
-                print("বিশ্লেষণ করা সম্ভব হয়নি, পর্যাপ্ত ডেটা নেই।")
-        else:
-            print("ভুল কমান্ড বা আর্গুমেন্ট দেওয়া হয়েছে।")
-            
-    except (ValueError, TypeError) as e:
-        print("ত্রুটি:", e)
-        return 1
-    return 0
+                pf["positions"].append({
+                    "symbol": sym, "qty": float(qty), "entry": float(entry), 
+                    "sl": float(sl), "t1": float(t1) if t1 else None, 
+                    "sector": C.sector_of(sym)[0], "date": C.ist_now().date().isoformat()
+                })
+                C.save_json("portfolio.json", pf)
+                st.success(f"{sym} সফলভাবে যোগ করা হয়েছে!")
 
-if __name__ == "__main__":
-    sys.exit(main())
+# ==========================================
+# ৩. ট্রেড বন্ধ করা (Close)
+# ==========================================
+elif menu == "ট্রেড বন্ধ করুন":
+    st.subheader("❌ ট্রেড বন্ধ বা ক্লোজ করুন")
+    pf = C.load_json("portfolio.json", {"positions": [], "closed": []})
+    symbols = [p["symbol"] for p in pf["positions"]]
+    
+    if not symbols:
+        st.info("বন্ধ করার মতো কোনো পজিশন নেই।")
+    else:
+        with st.form("close_form"):
+            sym = st.selectbox("স্টক সিলেক্ট করুন", symbols)
+            exit_price = st.number_input("বিক্রির দাম (Exit Price)", min_value=0.0, value=100.0)
+            submitted = st.form_submit_button("ট্রেড বন্ধ করুন")
+            
+            if submitted:
+                pos = next((p for p in pf["positions"] if p["symbol"] == sym), None)
+                if pos:
+                    pnl = (float(exit_price) - pos["entry"]) * pos["qty"]
+                    pf["positions"].remove(pos)
+                    pf["closed"].append({
+                        "symbol": sym, "pnl": round(pnl, 2), "exit": float(exit_price),
+                        "date": C.ist_now().date().isoformat()
+                    })
+                    C.save_json("portfolio.json", pf)
+                    st.success(f"ট্রেড বন্ধ হয়েছে! লাভ/লোকসান: ₹{pnl:.2f}")
+
+# ==========================================
+# ৪. স্টক অ্যানালিসিস পাইপলাইন (Analyze)
+# ==========================================
+elif menu == "স্টক অ্যানালিসিস পাইপলাইন":
+    st.subheader("🔍 স্টক ডিপ অ্যানালিসিস ও এজেন্ট পাইপলাইন")
+    sym_input = st.text_input("স্টকের নাম লিখুন (যেমন: RELIANCE, TCS)", "TCS").upper().strip()
+    
+    if st.button("বিশ্লেষণ শুরু করুন"):
+        with st.spinner("এজেন্টরা কাজ করছে, দয়া করে অপেক্ষা করুন..."):
+            try:
+                macro = A2.macro_context()
+                df = C.get_daily(sym_input, "2y")
+                if df is None:
+                    st.error("ডেটা পাওয়া যায়নি। সঠিক টিকার নাম দিন।")
+                else:
+                    snap = C.daily_snapshot(df, cfg)
+                    info = A2.fetch_info(sym_input)
+                    sec_name, _, guessed = A12.resolve_sector(sym_input, info)
+                    ctx = A2.analyze(sym_input, cfg, macro, info=info, df=df)
+                    fund = A11.analyze(sym_input, info=info)
+                    secrep = A12.sector_report(sec_name, sym_input, df, guessed)
+                    rad = A10.radar(sym_input, info.get("longName") or info.get("shortName"), sec_name)
+                    
+                    timing = A3.analyze(sym_input, cfg, snap)
+                    plan = A4.make_plan(sym_input, snap, timing, cfg)
+                    tm = A5.run(sym_input, plan, cfg, df)
+                    risk = A6.evaluate(sym_input, plan, ctx, cfg)
+                    
+                    st.success("বিশ্লেষণ সম্পন্ন হয়েছে!")
+                    st.metric(label="কোম্পানির নাম", value=rad.get("company", sym_input))
+                    st.write(f"**বর্তমান দাম:** ₹{snap['price']} | **সেক্টর:** {sec_name}")
+                    st.write(f"**ফান্ডামেন্টাল স্ট্যাটাস:** {fund['verdict']}")
+                    st.json(risk)
+            except Exception as e:
+                st.error(f"ত্রুটি দেখা দিয়েছে: {e}")
